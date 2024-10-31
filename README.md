@@ -56,10 +56,13 @@ This repository contains my personal dotfiles for various applications and confi
 ## Directories
 
 - **bash/** - Bash configuration files
-- **git/** - Git configuration files
+- **git/** - Git configuration files (Not added yet)
 - **nvim/** - Neovim configuration files
-- (add other directories as needed)
+- (Will add some other configs later)
 
 ## Notes
 
 - Ensure to check and edit any configuration files as needed after stowing, as they may contain paths or settings specific to your previous environment.
+
+
+To be continued...
