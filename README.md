@@ -1,4 +1,3 @@
-```markdown
 # Dotfiles
 
 This repository contains my personal dotfiles for various applications and configurations. It is designed to be easily installed using GNU Stow.
