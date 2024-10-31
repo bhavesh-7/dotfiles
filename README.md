@@ -63,7 +63,6 @@ This repository contains my personal dotfiles for various applications and confi
 ## Notes
 
 - Ensure to check and edit any configuration files as needed after stowing, as they may contain paths or settings specific to your previous environment.
-```
 
 ### Instructions
 - Replace `https://github.com/yourusername/dotfiles.git` with the actual URL of your GitHub repository.
