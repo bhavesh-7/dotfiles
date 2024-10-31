@@ -65,4 +65,8 @@ This repository contains my personal dotfiles for various applications and confi
 - Ensure to check and edit any configuration files as needed after stowing, as they may contain paths or settings specific to your previous environment.
 
 
-To be continued...
+
+
+
+
+To be continued.....
