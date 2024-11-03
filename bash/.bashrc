@@ -13,6 +13,8 @@ OSH_THEME="font"
 # Default Setters
 export EDITOR="nvim"
 export VISUAL="nvim"
+export RANGER_LOAD_DEFAULT_RC=FALSE
+export TERMINAL=kitty
 
 # Let OMB use SUDO
 OMB_USE_SUDO=true
