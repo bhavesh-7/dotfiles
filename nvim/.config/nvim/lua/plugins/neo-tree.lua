@@ -1,4 +1,4 @@
-return{
+return {
   "nvim-neo-tree/neo-tree.nvim",
   branch = "v3.x",
   dependencies = {
@@ -7,7 +7,17 @@ return{
     "MunifTanjim/nui.nvim",
   },
   config = function()
-    vim.keymap.set('n','<C-n>', ':Neotree filesystem reveal left<CR>', {})
-  end
+    require("neo-tree").setup({
+      filesystem = {
+        filtered_items = {
+          hide_dotfiles = false,
+          hide_gitignored = true,
+          hide_by_name = {
+            ".git",
+          },
+        },
+      },
+    })
+    vim.keymap.set("n", "<C-n>", ":Neotree filesystem reveal left<CR>", {})
+  end,
 }
-
