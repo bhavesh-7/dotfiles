@@ -30,6 +30,7 @@ completions=(
 aliases=(
   general
   primitive
+  fzf
 )
 
 # Plugins from ~/.oh-my-bash/plugins dir
