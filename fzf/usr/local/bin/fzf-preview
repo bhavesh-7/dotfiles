@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#
+# The purpose of this script is to demonstrate how to preview a file or an
+# image in the preview window of fzf.
+#
+# Dependencies:
+# - https://github.com/sharkdp/bat
+# - https://github.com/hpjansson/chafa
+# - https://iterm2.com/utilities/imgcat
+# - pdftotext (for PDF previews)
+# - LibreOffice (for ODT and DOCX previews)
+
+if [[ $# -ne 1 ]]; then
+  >&2 echo "usage: $0 FILENAME"
+  exit 1
+fi
+
+file=${1/#\~\//$HOME/}
+type=$(file --dereference --mime -- "$file")
+
+# Check if the file is not an image
+if [[ ! $type =~ image/ ]]; then
+  if [[ $type =~ =binary ]]; then
+    file "$1"
+    exit
+  fi
+
+  # Handle document previews
+  if [[ $type =~ application/pdf ]]; then
+    # Preview PDF files using pdftotext
+    if command -v pdftotext > /dev/null; then
+      pdftotext "$file" - | less -R
+    else
+      echo "pdftotext not found. Install it to preview PDF files."
+    fi
+    exit
+  fi
+
+  if [[ $type =~ application/vnd.oasis.opendocument.text || $type =~ application/vnd.openxmlformats-officedocument.wordprocessingml.document ]]; then
+    # Preview ODT and DOCX files using LibreOffice in headless mode
+    if command -v libreoffice > /dev/null; then
+      libreoffice --headless --convert-to txt:Text "$file" --outdir /tmp
+      cat "/tmp/$(basename "${file%.*}.txt")"
+      rm "/tmp/$(basename "${file%.*}.txt")"
+    else
+      echo "LibreOffice not found. Install it to preview ODT and DOCX files."
+    fi
+    exit
+  fi
+
+  # Sometimes bat is installed as batcat.
+  if command -v batcat > /dev/null; then
+    batname="batcat"
+  elif command -v bat > /dev/null; then
+    batname="bat"
+  else
+    cat "$1"
+    exit
+  fi
+
+  ${batname} --style="${BAT_STYLE:-numbers}" --color=always --pager=never -- "$file"
+  exit
+fi
+
+dim=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}
+if [[ $dim = x ]]; then
+  dim=$(stty size < /dev/tty | awk '{print $2 "x" $1}')
+elif ! [[ $KITTY_WINDOW_ID ]] && (( FZF_PREVIEW_TOP + FZF_PREVIEW_LINES == $(stty size < /dev/tty | awk '{print $1}') )); then
+  # Avoid scrolling issue when the Sixel image touches the bottom of the screen
+  dim=${FZF_PREVIEW_COLUMNS}x$((FZF_PREVIEW_LINES - 1))
+fi
+
+# Image preview using kitty
+if [[ $KITTY_WINDOW_ID ]]; then
+  # Memory transfer mode is the fastest option
+  kitty icat --clear --transfer-mode=memory --unicode-placeholder --stdin=no --place="$dim@0x0" "$file" | sed '$d' | sed $'$s/$/\e[m/'
+
+# Use chafa with Sixel output
+elif command -v chafa > /dev/null; then
+  chafa -s "$dim" "$file"
+  # Add a new line character so that fzf can display multiple images in the preview window
+  echo
+
+# If chafa is not found but imgcat is available, use it on iTerm2
+elif command -v imgcat > /dev/null; then
+  imgcat -W "${dim%%x*}" -H "${dim##*x}" "$file"
+
+# Cannot find any suitable method to preview the image
+else
+  file "$file"
+fi
+
