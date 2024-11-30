@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Capture the initial brightness value
+initial_brightness=$(razer-cli -d PM2350H20003110 -l | grep "brightness:" | awk '{print $2}' | cut -d '.' -f1)
+
+# Subtract 10 from the initial brightness value
+new_brightness=$((initial_brightness - 20))
+
+# Execute the command with the new brightness value
+razer-cli -d PM2350H20003110 -b "$new_brightness"

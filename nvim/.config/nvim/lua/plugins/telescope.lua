@@ -8,8 +8,8 @@ return {
 			telescope.setup({
 				defaults = {
 					vimgrep_arguments = {
-            "rg",
-            "--color=never",
+						"rg",
+						"--color=never",
 						"--no-heading",
 						"--with-filename",
 						"--line-number",
@@ -18,7 +18,7 @@ return {
 						"--hidden",
 					},
 				},
-        pickers = {
+				pickers = {
 					find_files = {
 						hidden = true,
 					},

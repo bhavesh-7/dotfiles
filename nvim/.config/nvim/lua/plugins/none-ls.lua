@@ -11,6 +11,8 @@ return {
         null_ls.builtins.formatting.prettier,
         null_ls.builtins.formatting.black,
         null_ls.builtins.formatting.isort,
+        null_ls.builtins.formatting.google_java_format,
+        null_ls.builtins.diagnostics.ktlint,
         null_ls.builtins.diagnostics.rubocop,
         null_ls.builtins.diagnostics.trivy,
         null_ls.builtins.diagnostics.mypy,

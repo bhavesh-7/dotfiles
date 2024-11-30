@@ -13,11 +13,30 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
     os.exit(1)
   end
 end
+vim.opt.shell = "/bin/bash -ic"
 vim.opt.rtp:prepend(lazypath)
 require("vim-options")
 require("lazy").setup("plugins")
 
+-- some useful keymaps
+vim.keymap.set('n', '<leader>Q', function()
+    if os.getenv('TMUX') then
+        os.execute('tmux kill-pane') -- Close tmux pane
+    end
+end, { noremap = true, silent = true })
 
+vim.keymap.set('n', '<leader>q', function()
+    vim.cmd('q')
+end, { noremap = true, silent = true })
 
+vim.keymap.set('n', '<leader>wq', function()
+    vim.cmd('wa | q')
+end, { noremap = true, silent = true })
 
+vim.keymap.set('n', '<leader>W', function()
+    vim.cmd('wa')
+end, { noremap = true, silent = true })
 
+vim.keymap.set('n', '<leader>FQ', function()
+    vim.cmd('q!')
+end, { noremap = true, silent = true })

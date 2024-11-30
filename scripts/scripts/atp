@@ -1,0 +1,14 @@
+#!/bin/bash
+
+for file in ~/scripts/scripts/*; do
+    target="/usr/local/bin/$(basename "$file")"
+    
+    # Check if the symbolic link already exists
+    if [ -L "$target" ]; then
+        echo "Link for $(basename "$file") already exists. Skipping..."
+    else
+        sudo ln -s "$file" "$target"
+        echo "Created link for $(basename "$file")"
+    fi
+done
+
