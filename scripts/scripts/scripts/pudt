@@ -1,5 +1,7 @@
 #!/bin/bash
-
+# Unfortunatly, snapd is not perfetly working on my system. So, I am not using it.
+# Though, I am keeping commented code for future use.
+# If you want to use snap, uncomment the code.
 update_dnf(){
 	echo "Updating dnf packages...."
 	sudo dnf update -y
@@ -18,16 +20,16 @@ update_snap(){
 if [ "$1" == "all" ]; then
 	update_dnf
 	update_flatpak
-	update_snap
+	# update_snap
 elif [ "$1" == "2" ]; then
 	update_dnf
 	update_flatpak
 elif [ "$1" == "3" ]; then
-	update_snap
+	# update_snap
 	update_dnf
 elif [ "$1" == "4" ]; then
 	update_flatpak
-	update_snap
+	# update_snap
 else
 	echo "Invalid argument. Usage:"
 	echo " pudt all   - Update dnf, flatpak, and snap"

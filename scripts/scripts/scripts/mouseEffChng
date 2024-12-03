@@ -1,11 +1,15 @@
 #!/bin/bash
+# This script needs distro bassed openrazer config and openrazer-daemon/meta to be installed
+# This script needs razer-cli to be installed
+
+mouseSerial=$(razer-cli -l | awk '/type: mouse/{flag=1} /serial:/&&flag{print $2; exit}')
 
 # Capture the initial effect value (string)
-effect=$(razer-cli -d PM2350H20003110 -l | grep "effect" | awk '{print $2}' | grep -v "available:")
+effect=$(razer-cli -d "$mouseSerial" -l | grep "effect" | awk '{print $2}' | grep -v "available:")
 
 # Set conditions to toggle between the two effects
 if [ "$effect" == "static" ]; then
-    razer-cli -d PM2350H20003110 -e none
+    razer-cli -d "$mouseSerial" -e none
 else
-    razer-cli -d PM2350H20003110 -e static
+    razer-cli -d "$mouseSerial" -e static
 fi
