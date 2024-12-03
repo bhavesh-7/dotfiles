@@ -1,0 +1,92 @@
+#!/bin/bash
+# This script is an auto-setup script for my fedora based system
+
+# 1. Manage premature updates 
+echo "Managing premature updates..."
+sudo dnf config-manager --setopt=fastestmirror=True --save
+sudo dnf config-manager --setopt=max_parallel_downloads=10 --save
+sudo dnf clean all
+sudo dnf check-update
+sudo dnf update -y
+echo "If your runing this script for the first time, please restart your system by pressing 'y' and run this script again."
+echo "If you have already restarted your system, press 'n' to continue."
+read -p "Restart your system? (y/n): " restart
+if [ "$restart" == "y" ]; then
+  sudo reboot
+fi
+sudo dnf autoremove -y
+
+# 2. Enable RPM Fusion repositories
+echo "Enabling RPM Fusion repositories..."
+sudo dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+sudo dnf install -y https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+sudo dnf group upgrade core -y
+
+# 3. Install Gnome Tweaks
+echo "Installing Gnome Tweaks..."
+sudo dnf install -y gnome-tweaks
+
+# 4. Install Gnome Extensions Manager
+echo "Installing Gnome Extensions Manager..."
+sudo flatpak install flathub org.gnome.Extensions com.mattjakeman.ExtensionManager -y
+
+# 5. Install video codecs
+echo "Installing video codecs..."
+sudo dnf install openh264 gstreamer1-plugin-openh264 mozilla-openh264 -y
+
+# 6. Install Multimedia Plugins
+echo "Installing Multimedia Plugins..."
+sudo dnf group install multimedia -y
+
+# 7. Install dotfiles and configure them
+echo "Installing dotfiles..."
+sudo dnf install git stow curl zip -y
+curl -s "https://get.sdkman.io" | bash
+source ~/.sdkman/bin/sdkman-init.sh
+sdk install gradle
+git clone https://github.com/bhavesh-7/dotfiles.git ~/.dotfiles
+rm ~/.bashrc
+cd ~/.dotfiles
+git clone https://github.com/jimeh/tmuxifier.git tmux/.tmuxifier
+stow bash kitty nvim ranger scripts tmux
+source ~/.bashrc
+cd ~/scripts && ./atp
+cd ~
+
+# 7.5 Install terminal utilities
+echo "Installing terminal utilities..."
+sudo dnf install htop btop bat fzf neofetch sl thefuck ranger kitty neovim make gh tmux -y
+
+# 8. Install development tools
+echo "Installing development tools..."
+sudo dnf group install development-tools -y
+sudo dnf install java-latest-openjdk java-latest-openjdk-devel -y
+sudo dnf install python3 python3-pip python3-devel python3-virtualenv python3-wheel python3-setuptools -y
+sudo dnf install nodejs npm -y
+sudo dnf install rust cargo -y
+sudo dnf install go -y
+sudo dnf install ruby ruby-devel -y
+sudo dnf install perl perl-devel -y
+sudo dnf install php php-cli php-devel -y
+sudo dnf install gcc gcc-c++ -y
+sudo dnf install cmake -y
+sudo dnf install clang -y
+
+# 9. Install necessary applications
+echo "Installing necessary applications..."
+sudo dnf install vlc gimp gparted bleachbit kdenlive obs-studio krita inkscape darktable audacity -y
+
+# 10. Install preload
+echo "Installing preload..."
+sudo dnf copr enable elxreno/preload -y && sudo dnf install preload -y
+
+# 11. Install dnfdragora
+echo "Installing dnfdragora..."
+sudo dnf install dnfdragora -y
+
+# 12. Install Timeshift
+echo "Installing Timeshift..."
+sudo dnf install timeshift -y
+echo "Please configure Timeshift manually."
+
+
