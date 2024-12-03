@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Capture the initial effect value (string)
+effect=$(razer-cli -d PM2350H20003110 -l | grep "effect" | awk '{print $2}' | grep -v "available:")
+
+# Set conditions to toggle between the two effects
+if [ "$effect" == "static" ]; then
+    razer-cli -d PM2350H20003110 -e none
+else
+    razer-cli -d PM2350H20003110 -e static
+fi
