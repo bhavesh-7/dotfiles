@@ -20,7 +20,10 @@ return {
 				theme_conf = { border = true },
 				previewer = false,
 			},
-			pre_save_cmds = { "silent! lua require('neo-tree').close_all()" },
+			pre_save_cmds = {
+				"silent! lua require('neo-tree').close_all()",
+        "silent! DBUIClose",
+			},
 		})
 		vim.keymap.set(
 			"n",

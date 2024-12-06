@@ -1,0 +1,5 @@
+#!/bin/bash
+echo "Applying GNOME extension configurations..."
+dconf load /org/gnome/shell/extensions/ < gnome-extensions-config.dconf
+
+# well this is it, what else you could've done?
