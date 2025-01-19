@@ -70,7 +70,7 @@ export class DashOpenWindowsIcon {
 
         if (dash._showWindowsIcon && !dash._showWindowsIconClickedId) {
             dash._showWindowsIconClickedId = dash._showWindowsIcon.toggleButton.connect('clicked', () => {
-                this._activateSearchProvider(Me.PREFIX);
+                this._activateSearchProvider(Me.defaultPrefix);
             });
         }
 
@@ -166,7 +166,7 @@ const OpenWindowsIcon = GObject.registerClass({
         });
         this.icon.y_align = Clutter.ActorAlign.CENTER;
 
-        this.toggleButton.add_child(this.icon);
+        this.toggleButton.set_child(this.icon);
         this.toggleButton._delegate = this;
 
         this.setChild(this.toggleButton);

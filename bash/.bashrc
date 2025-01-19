@@ -32,7 +32,6 @@ aliases=(
   primitive
   fzf
 )
-
 # Plugins from ~/.oh-my-bash/plugins dir
 plugins=(
   git
@@ -51,3 +50,29 @@ export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
 
 eval "$(thefuck --alias)"
+
+# pnpm
+export PNPM_HOME="/home/bhavesh/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/home/bhavesh/anaconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/home/bhavesh/anaconda3/etc/profile.d/conda.sh" ]; then
+        . "/home/bhavesh/anaconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/home/bhavesh/anaconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+
+eval "$(zoxide init bash)"

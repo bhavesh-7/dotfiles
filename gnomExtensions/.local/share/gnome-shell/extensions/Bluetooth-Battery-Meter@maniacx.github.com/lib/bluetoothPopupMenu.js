@@ -13,7 +13,7 @@ export const BluetoothDeviceItem = GObject.registerClass({
             null),
     },
 }, class BluetoothDeviceItem extends PopupMenu.PopupBaseMenuItem {
-    constructor(toggle, device, iconCompatable, batteryInfoReported) {
+    constructor(toggle, device, batteryReported, qsLevelEnabled, deviceIcon) {
         super({
             style_class: 'bt-device-item',
         });
@@ -27,13 +27,13 @@ export const BluetoothDeviceItem = GObject.registerClass({
         this._connectedColor = toggle._connectedColor;
         this._disconnectedColor = toggle._disconnectedColor;
         this._device = device;
-        this._iconCompatable = iconCompatable;
-        this._batteryEnabled = false;
-
+        this._iconType = deviceIcon;
+        this._qsLevelEnabled = qsLevelEnabled;
 
         this._icon = new St.Icon({
             style_class: 'popup-menu-icon',
         });
+        this._icon.set_gicon(this._getIcon(`bbm-${this._iconType}-symbolic`));
         this.add_child(this._icon);
 
         this._label = new St.Label({
@@ -58,10 +58,6 @@ export const BluetoothDeviceItem = GObject.registerClass({
             this, 'visible',
             GObject.BindingFlags.SYNC_CREATE);
 
-        this._device.bind_property('icon',
-            this._icon, 'icon-name',
-            GObject.BindingFlags.SYNC_CREATE);
-
         this._device.bind_property('alias',
             this._label, 'text',
             GObject.BindingFlags.SYNC_CREATE);
@@ -81,14 +77,16 @@ export const BluetoothDeviceItem = GObject.registerClass({
         this._device.connectObject(
             'notify::connected', () => {
                 this._assignPairingIcon(false);
+                this._recordTimeEvent();
             },
             this
         );
 
-        if (this._iconCompatable && !batteryInfoReported) {
+        if (!batteryReported) {
             this._device.bind_property('battery_percentage',
                 this, 'batteryPercentage',
                 GObject.BindingFlags.SYNC_CREATE);
+
             this._notiftId = this.connect(
                 'notify::batteryPercentage', () => {
                     if (this._device.battery_percentage > 0) {
@@ -98,6 +96,9 @@ export const BluetoothDeviceItem = GObject.registerClass({
                     }
                 }
             );
+
+            if (this._device.battery_percentage > 0)
+                this._addBatterySupportedDevice();
         }
 
         this.connectObject('destroy', () => {
@@ -107,28 +108,39 @@ export const BluetoothDeviceItem = GObject.registerClass({
             if (this._idleTimerId)
                 GLib.source_remove(this._idleTimerId);
             this._idleTimerId = null;
+            if (this._eventTimerId)
+                GLib.source_remove(this._eventTimerId);
+            this._eventTimerId = null;
+            if (this._stateSignalId)
+                this._client._client.disconnect(this._stateSignalId);
+            this._stateSignalId = null;
             if (this._notiftId)
                 this.disconnect(this._notiftId);
+            this._notiftId = null;
         }, this);
     }
 
-    updateProps(batteryEnabled) {
-        this._batteryEnabled = batteryEnabled;
-
-        if (this._iconCompatable && this._showBatteryIcon)
-            this._batteryIcon.visible =  this._batteryEnabled && this._device.battery_percentage > 0;
-
-        if (this._iconCompatable && this._showBatteryPercentage)
-            this._batteryPercentageLabel.visible =  this._batteryEnabled && this._device.battery_percentage > 0;
+    updateProps(qsLevelEnabled, deviceIcon) {
+        this._qsLevelEnabled = qsLevelEnabled;
+        if (this._showBatteryIcon)
+            this._batteryIcon.visible =  this._qsLevelEnabled && this._device.battery_percentage > 0;
+        if (this._showBatteryPercentage)
+            this._batteryPercentageLabel.visible =  this._qsLevelEnabled && this._device.battery_percentage > 0;
+        if (this._iconType !== deviceIcon) {
+            this._iconType = deviceIcon;
+            this._icon.set_gicon(this._getIcon(`bbm-${this._iconType}-symbolic`));
+        }
     }
 
     _addBatterySupportedDevice() {
-        this._toggle.addBatterySupportedDevices(this._device);
-        this.disconnectObject(this);
+        const path = this._device.get_object_path();
+        const props = this._toggle._deviceList.get(path);
+        this._toggle._deviceList.set(path, {...props, batteryReported: true, qsLevelEnabled: true, indicatorMode: 2});
+        this._toggle._pushDevicesToGsetting();
     }
 
     _displayBatteryLevelTextPercentage() {
-        if (this._iconCompatable && this._showBatteryPercentage) {
+        if (this._showBatteryPercentage) {
             this._batteryPercentageLabel = new St.Label({text: '100%'});
             this.add_child(this._batteryPercentageLabel);
             if (this._idleTimerId)
@@ -142,6 +154,7 @@ export const BluetoothDeviceItem = GObject.registerClass({
                 }
                 this._batteryPercentageLabel.text = '';
                 this._bindLabel();
+                this._idleTimerId = null;
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -151,18 +164,16 @@ export const BluetoothDeviceItem = GObject.registerClass({
         this._device.bind_property_full('battery_percentage',
             this._batteryPercentageLabel, 'visible',
             GObject.BindingFlags.SYNC_CREATE,
-            (bind, source) => [true, this._batteryEnabled && source > 0], null);
+            (bind, source) => [true, this._qsLevelEnabled && source > 0], null);
 
         this._device.bind_property_full('battery_percentage',
             this._batteryPercentageLabel, 'text',
             GObject.BindingFlags.SYNC_CREATE,
             (bind, source) => [true, `${source}%`], null);
-
-        this._idleTimerId = null;
     }
 
     _displayBatteryLevelIcon() {
-        if (this._iconCompatable && this._showBatteryIcon) {
+        if (this._showBatteryIcon) {
             this._batteryIcon = new St.Icon({
                 style_class: 'popup-menu-icon',
             });
@@ -171,7 +182,7 @@ export const BluetoothDeviceItem = GObject.registerClass({
             this._device.bind_property_full('battery_percentage',
                 this._batteryIcon, 'visible',
                 GObject.BindingFlags.SYNC_CREATE,
-                (bind, source) => [true, this._batteryEnabled && source > 0], null);
+                (bind, source) => [true, this._qsLevelEnabled && source > 0], null);
 
             this._device.bind_property_full('battery_percentage',
                 this._batteryIcon, 'icon-name',
@@ -220,6 +231,38 @@ export const BluetoothDeviceItem = GObject.registerClass({
 
     _getIcon(iconName) {
         return Gio.icon_new_for_string(`${this._extensionPath}/icons/hicolor/scalable/actions/${iconName}.svg`);
+    }
+
+    _recordTimeEvent() {
+        let stateChanged = false;
+
+        this._stateSignalId = this._client._client.connect('notify::default-adapter-state', () => {
+            stateChanged = true;
+            if (this._eventTimerId) {
+                GLib.Source.remove(this._eventTimerId);
+                this._eventTimerId = null;
+            }
+            this._client._client.disconnect(this._stateSignalId);
+        });
+
+        this._eventTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 3, () => {
+            if (!stateChanged) {
+                const currentTime = GLib.DateTime.new_now_utc().to_unix();
+                const path = this._device.get_object_path();
+                const props = this._toggle._deviceList.get(path);
+                if (this._device.connected)
+                    this._toggle._deviceList.set(path, {...props, connectedTime: currentTime});
+                else
+                    this._toggle._deviceList.set(path, {...props, disconnectedTime: currentTime});
+                this._toggle._pushDevicesToGsetting();
+            }
+
+            if (this._stateSignalId)
+                this._client._client.disconnect(this._stateSignalId);
+            this._stateSignalId = null;
+            this._eventTimerId = null;
+            return GLib.SOURCE_REMOVE;
+        });
     }
 });
 

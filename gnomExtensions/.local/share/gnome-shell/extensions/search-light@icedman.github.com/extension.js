@@ -87,6 +87,12 @@ export default class SearchLightExt extends Extension {
           this._updateBlurredBackground();
           this._updateCss();
           break;
+	case 'use-animations':
+	  this._useAnimations = value;
+	  break;
+	case 'animation-speed':
+          this._animationSpeed = value;
+	  break;
         case 'border-radius':
           break;
         case 'shortcut-search':
@@ -158,6 +164,9 @@ export default class SearchLightExt extends Extension {
     this._updateShortcut();
     this._updateShortcut2();
     this._updateCss();
+
+    this._useAnimations = this._settings.get_boolean('use-animations');
+    this._animationSpeed = this._settings.get_double('animation-speed');
 
     Main.overview.connectObject(
       'overview-showing',
@@ -427,6 +436,10 @@ export default class SearchLightExt extends Extension {
   show() {
     if (Main.overview.visible) return;
 
+    if (this._animSeq) {
+      this._hiTimer.cancel(this._animSeq);
+      this._animSeq = null;
+    }
     this._acquire_ui();
 
     if (this._bgActor) {
@@ -434,18 +447,38 @@ export default class SearchLightExt extends Extension {
       this._bgActor.set_content(bgSource.get_content());
     }
 
-    this.mainContainer.opacity = 0;
     this._updateCss();
     this._layout();
-    this.mainContainer.show();
-    this.container.show();
 
     // fixes the background size relative to text - after adjusting font size
-    this._hiTimer.runOnce(() => {
-      this.mainContainer.opacity = 255;
+    this._animSeq = this._hiTimer.runOnce(() => {
+      this._animSeq = null;
       this._layout();
+      // animate after adjust so width+height are correct
+      if (this._useAnimations) {
+        this.mainContainer.opacity = 0;
+        this.mainContainer.scale_x = 0.9;
+        this.mainContainer.scale_y = 0.9;
+        this.mainContainer.translation_x = this.width * 0.1 / 2
+        this.mainContainer.translation_y = this.height * 0.1 / 2
+        this.mainContainer.ease({
+          opacity : 255,
+          scale_x : 1.0,
+          scale_y : 1.0,
+          translation_x : 0,
+          translation_y : 0,
+          duration : this._animationSpeed,
+          mode : Clutter.AnimationMode.EASE_OUT
+        });
+      } else {
+        this.mainContainer.scale_x = 1.0;
+        this.mainContainer.scale_y = 1.0;
+        this.mainContainer.opacity = 255;
+      }
     }, 100);
 
+    this.mainContainer.show();
+    this.container.show();
     this._add_events();
 
     Meta.disable_unredirect_for_display(global.display);
@@ -455,10 +488,29 @@ export default class SearchLightExt extends Extension {
     if (this._isDraggingIcon()) {
       return;
     }
-    this._visible = false;
+
     this._release_ui();
     this._remove_events();
-    this.mainContainer.hide();
+
+    if (this._useAnimations) {
+      this.mainContainer.ease({
+        opacity : 0,
+        scale_x : 0.9,
+        scale_y : 0.9,
+        translation_x : this.width * 0.1 / 2,
+        translation_y : this.height * 0.1 / 2,
+        duration : this._animationSpeed,
+        mode : Clutter.AnimationMode.EASE_OUT,
+        onComplete : () => {
+          this._visible = false;
+          this.mainContainer.hide();
+        }
+      });
+    } else {
+      this.mainContainer.opacity = 0;
+      this._visible = false;
+      this.mainContainer.hide();
+    }
     // this._hidePopups();
 
     Meta.enable_unredirect_for_display(global.display);

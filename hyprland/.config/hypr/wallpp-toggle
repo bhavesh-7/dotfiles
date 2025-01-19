@@ -1,0 +1,28 @@
+#!/bin/bash
+
+liveWallpaper="mpvpaper -o \"loop-file --no-audio --video-zoom=0.2\" '*' ~/.local/share/backgrounds/vwallpp08.mp4 >> /dev/null &"
+
+# Check if mpvpaper is running
+mpv_running=$(pgrep -x mpvpaper >/dev/null && echo 1 || echo 0)
+# Check if hyprpaper is running
+hypr_running=$(pgrep -x hyprpaper >/dev/null && echo 1 || echo 0)
+
+if [[ $mpv_running -eq 1 && $hypr_running -eq 0 ]]; then
+    # If only mpvpaper is running
+    killall mpvpaper
+    hyprpaper &
+    notify-send -t 1000 "Wallpaper Toggler" "Switched to Hyprpaper"
+elif [[ $mpv_running -eq 0 && $hypr_running -eq 1 ]]; then
+    # If only hyprpaper is running
+    killall hyprpaper
+    eval $liveWallpaper
+    notify-send -t 1000 "Wallpaper Toggler" "Switched to Mpvpaper"
+elif [[ $mpv_running -eq 1 && $hypr_running -eq 1 ]]; then
+    # If both are running
+    killall mpvpaper
+    notify-send -t 1000 "Wallpaper Toggler" "Stopped Mpvpaper (Hyprpaper running)"
+else
+    # If neither is running
+    hyprpaper &
+    notify-send -t 1000 "Wallpaper Toggler" "Started Hyprpaper"
+fi

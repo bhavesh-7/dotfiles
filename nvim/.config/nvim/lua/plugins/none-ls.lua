@@ -16,6 +16,7 @@ return {
         'ktlint',
         'trivy',
         'mypy',
+        'htmlhint',
       },
       automatic_installation = false,
       handlers = {},

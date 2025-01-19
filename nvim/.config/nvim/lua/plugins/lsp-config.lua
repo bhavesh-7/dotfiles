@@ -11,7 +11,7 @@ return {
     lazy = false,
     config = function()
       require("mason-lspconfig").setup({
-        ensure_installed = { "lua_ls", "ts_ls", "kotlin_language_server", "pylsp", "jdtls" },
+        ensure_installed = { "lua_ls", "ts_ls", "kotlin_language_server", "pylsp", "jdtls", "html" },
         automatic_installation = true,
       })
     end,
@@ -22,6 +22,12 @@ return {
       local capabilities = require("cmp_nvim_lsp").default_capabilities()
       local lspconfig = require("lspconfig")
       lspconfig.lua_ls.setup({
+        capabilities = capabilities,
+      })
+      lspconfig.emmet_ls.setup({
+        capabilities = capabilities,
+      })
+      lspconfig.html.setup({
         capabilities = capabilities,
       })
       lspconfig.ts_ls.setup({
@@ -37,6 +43,9 @@ return {
         capabilities = capabilities,
       })
       lspconfig.bashls.setup({
+        capabilities=capabilities,
+      })
+      lspconfig.lemminx.setup({
         capabilities=capabilities,
       })
       vim.keymap.set("n", "K", vim.lsp.buf.hover, {})

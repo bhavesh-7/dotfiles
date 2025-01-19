@@ -37,7 +37,7 @@ CLOCK_THEME_PROMPT_PREFIX=''
 CLOCK_THEME_PROMPT_SUFFIX=' '
 THEME_SHOW_CLOCK=${THEME_SHOW_CLOCK:-"true"}
 THEME_CLOCK_COLOR=${THEME_CLOCK_COLOR:-"$_omb_prompt_bold_teal"}
-THEME_CLOCK_FORMAT=${THEME_CLOCK_FORMAT:-"\uf017 %I:%M"}
+THEME_CLOCK_FORMAT=${THEME_CLOCK_FORMAT:-"\uf017 %H:%M"}
 
 OMB_PROMPT_VIRTUALENV_FORMAT='(%s) '
 OMB_PROMPT_SHOW_PYTHON_VENV=${OMB_PROMPT_SHOW_PYTHON_VENV:=true}
@@ -96,9 +96,9 @@ function _omb_theme_PROMPT_COMMAND() {
   # Append new history lines to history file
   history -a
   if [[ -n "$PROMPT_COMMAND_ALREADY_RUN" ]]; then
-    PS1="\n${fedoraIcon} >> $python_venv${hostname} ${_omb_prompt_bold_gray}>> $(clock_prompt)${_omb_prompt_bold_gray}>> [${_omb_prompt_bold_teal}\W${_omb_prompt_bold_gray}] ${java_version}${_omb_prompt_bold_green}$(scm_prompt_char_info)\n${ret_status}→ ${_omb_prompt_normal}"
+    PS1="\n${fedoraIcon} >> ${hostname} ${_omb_prompt_bold_gray}>> $(clock_prompt)${_omb_prompt_bold_gray}>> [${_omb_prompt_bold_teal}\W${_omb_prompt_bold_gray}] ${java_version}${_omb_prompt_bold_green}$(scm_prompt_char_info)\n${ret_status}→ ${_omb_prompt_normal}"
   else
-    PS1="${fedoraIcon} >> $python_venv${hostname} ${_omb_prompt_bold_gray}>> $(clock_prompt)${_omb_prompt_bold_gray}>> [${_omb_prompt_bold_teal}\W${_omb_prompt_bold_gray}] ${java_version}${_omb_prompt_bold_green}$(scm_prompt_char_info)\n${ret_status}→ ${_omb_prompt_normal}"
+    PS1="${fedoraIcon} >> ${hostname} ${_omb_prompt_bold_gray}>> $(clock_prompt)${_omb_prompt_bold_gray}>> [${_omb_prompt_bold_teal}\W${_omb_prompt_bold_gray}] ${java_version}${_omb_prompt_bold_green}$(scm_prompt_char_info)\n${ret_status}→ ${_omb_prompt_normal}"
   fi
 
   export PROMPT_COMMAND_ALREADY_RUN=true
