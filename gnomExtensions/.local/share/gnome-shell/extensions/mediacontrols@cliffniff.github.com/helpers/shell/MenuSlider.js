@@ -13,7 +13,7 @@ class MenuSlider extends St.BoxLayout {
     disabled;
     rate;
     constructor() {
-        super({ vertical: true });
+        super({ orientation: Clutter.Orientation.VERTICAL });
         this.rate = 1.0;
         this.slider = new Slider.Slider(0);
         this.textBox = new St.BoxLayout();
@@ -56,14 +56,21 @@ class MenuSlider extends St.BoxLayout {
             return Clutter.EVENT_STOP;
         });
 
+        const initial = new GObject.Value();
+        initial.init(GObject.TYPE_INT);
+        initial.set_int(0);
+        const final = new GObject.Value();
+        final.init(GObject.TYPE_INT);
+        final.set_int(1);
+
         this.transition = new Clutter.PropertyTransition({
             propertyName: "value",
             progressMode: Clutter.AnimationMode.LINEAR,
             repeatCount: 1,
             interval: new Clutter.Interval({
                 valueType: GObject.TYPE_DOUBLE,
-                initial: 0,
-                final: 1,
+                initial: initial,
+                final: final,
             }),
         });
 

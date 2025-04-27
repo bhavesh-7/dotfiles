@@ -5,10 +5,9 @@
   "name": "Wiggle",
   "settings-schema": "org.gnome.shell.extensions.wiggle",
   "shell-version": [
-    "46",
-    "47"
+    "48"
   ],
   "url": "https://github.com/mechtifs/wiggle",
   "uuid": "wiggle@mechtifs",
-  "version": 5
+  "version": 8
 }

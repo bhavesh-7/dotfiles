@@ -11,9 +11,10 @@
   "shell-version": [
     "45",
     "46",
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/maniacx/Bluetooth-Battery-Meter",
   "uuid": "Bluetooth-Battery-Meter@maniacx.github.com",
-  "version": 26
+  "version": 32
 }

@@ -59,20 +59,24 @@ case ":$PATH:" in
 esac
 # pnpm end
 
+
+
+
+eval "$(zoxide init bash)"
+eval "$(starship init bash)"
+
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/bhavesh/anaconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+__conda_setup="$('/home/bhavesh/Applications/anaconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/home/bhavesh/anaconda3/etc/profile.d/conda.sh" ]; then
-        . "/home/bhavesh/anaconda3/etc/profile.d/conda.sh"
+    if [ -f "/home/bhavesh/Applications/anaconda3/etc/profile.d/conda.sh" ]; then
+        . "/home/bhavesh/Applications/anaconda3/etc/profile.d/conda.sh"
     else
-        export PATH="/home/bhavesh/anaconda3/bin:$PATH"
+        export PATH="/home/bhavesh/Applications/anaconda3/bin:$PATH"
     fi
 fi
 unset __conda_setup
 # <<< conda initialize <<<
 
-
-eval "$(zoxide init bash)"

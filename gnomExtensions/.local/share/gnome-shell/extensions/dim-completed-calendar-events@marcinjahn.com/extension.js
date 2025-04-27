@@ -6,6 +6,7 @@ const SettingsPath = "org.gnome.shell.extensions.dim-completed-calendar-events";
 const StylePastDaysSetting = "style-past-days";
 const StyleOngoingEventsSetting = "style-ongoing-events";
 const HidePastEventsSetting = "hide-past-events";
+const HidePastEventsGracePeriodSetting = "hide-past-events-grace-period";
 
 class SettingsManager {
     constructor(settings) {
@@ -24,6 +25,10 @@ class SettingsManager {
         return this.settings.get_boolean(HidePastEventsSetting);
     }
 
+    getHidePastEventsGracePeriod() {
+        return this.settings.get_int(HidePastEventsGracePeriodSetting);
+    }
+
     setShouldStylePastDays(value) {
         this.settings.set_boolean(StylePastDaysSetting, value);
     }
@@ -34,6 +39,10 @@ class SettingsManager {
 
     setShouldHidePastEvents(value) {
         this.settings.set_boolean(HidePastEventsSetting, value);
+    }
+
+    setHidePastEventsGracePeriod(value) {
+        this.settings.set_int(HidePastEventsGracePeriodSetting, value);
     }
 
     connectToChanges(func) {
@@ -64,7 +73,10 @@ function buildPatchedReloadEventsFunction(patchConfiguration) {
             // MODIFICATIONS
             const styleAsCompleted = shouldBeStyledAsCompletedEvent(event, patchConfiguration.shouldStylePastDayEvents);
             const styleAsOngoing = shouldBeStyledAsOngoingEvent(event, patchConfiguration.shouldStyleOngoingEvents);
-            if (styleAsCompleted && patchConfiguration.shouldHidePastEvents) {
+            const gracePeriodExpired = isGracePeriodExpired(event, patchConfiguration.gracePeriod);
+            if (styleAsCompleted &&
+                patchConfiguration.shouldHidePastEvents &&
+                gracePeriodExpired) {
                 continue;
             }
             const style = styleAsCompleted
@@ -106,6 +118,12 @@ function shouldBeStyledAsCompletedEvent(event, shouldStylePastDays) {
         new Date().setHours(0, 0, 0, 0);
 
     return isFinished && !startedInSomePastDay;
+}
+
+function isGracePeriodExpired(event, gracePeriodInMinutes) {
+    const gracePeriodMs = gracePeriodInMinutes * 60 * 1000;
+
+    return +event.end + gracePeriodMs < new Date();
 }
 
 function shouldBeStyledAsOngoingEvent(event, shouldStyleOngoingEvents) {
@@ -156,6 +174,7 @@ function getPatchConfiguration(settings) {
         shouldStylePastDayEvents: settings.getShouldStylePastDays(),
         shouldStyleOngoingEvents: settings.getShouldStyleOngoingEvents(),
         shouldHidePastEvents: settings.getShouldHidePastEvents(),
+        gracePeriod: settings.getHidePastEventsGracePeriod(),
     };
 }
 

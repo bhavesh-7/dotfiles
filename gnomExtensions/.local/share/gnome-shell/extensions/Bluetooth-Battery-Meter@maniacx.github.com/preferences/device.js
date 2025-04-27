@@ -5,6 +5,8 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+import {supportedIcons} from '../lib/vectorImages.js';
+
 const  ConfigureWindow = GObject.registerClass({
 }, class ConfigureWindow extends Adw.Window {
     _init(settings, mac, deviceItem, pathInfo, parentWindow) {
@@ -46,14 +48,6 @@ const  ConfigureWindow = GObject.registerClass({
             title: _('Select Icon'),
             subtitle: _('Select the icon used for the indicator and quick menu'),
         });
-
-        const supportedIcons = [
-            'audio-card', 'audio-speakers', 'audio-speakers2', 'audio-speakers3', 'audio-headphones', 'audio-headset',
-            'earbuds', 'earbuds2', 'earbuds-stem', 'earbuds-stem2', 'input-gaming', 'input-gaming2', 'input-gaming3',
-            'input-keyboard', 'input-keyboard2', 'input-mouse', 'input-tablet', 'touchpad', 'phone', 'phone-samsung-galaxy-s',
-            'phone-apple-iphone', 'phone-google-nexus-one', 'camera-photo', 'camera-video', 'computer', 'video-display',
-            'modem', 'network-wireless', 'printer', 'scanner', 'multimedia-player', 'bluetooth',
-        ];
 
         const iconSplitButton = new Adw.SplitButton({
             icon_name: `bbm-${pathInfo.icon}-symbolic`,

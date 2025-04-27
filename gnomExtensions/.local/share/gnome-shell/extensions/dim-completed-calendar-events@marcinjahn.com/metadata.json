@@ -3,9 +3,10 @@
   "description": "Dim completed events in the top panel menu to easily distinguish between upcoming and past events. You can also highlight events that are ongoing.",
   "name": "Dim Completed Calendar Events",
   "shell-version": [
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/marcinjahn/gnome-dim-completed-calendar-events-extension",
   "uuid": "dim-completed-calendar-events@marcinjahn.com",
-  "version": 8
+  "version": 10
 }

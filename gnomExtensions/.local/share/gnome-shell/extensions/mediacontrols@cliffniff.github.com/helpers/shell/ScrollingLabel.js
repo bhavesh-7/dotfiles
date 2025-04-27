@@ -47,13 +47,7 @@ class ScrollingLabel extends St.ScrollView {
 
         this.onShowChangedId = this.label.connect("show", this.onShowChanged.bind(this));
         this.box.add_child(this.label);
-
-        if (Clutter.Container === undefined) {
-            this.add_child(this.box);
-        }
-        else {
-            this.add_actor(this.box);
-        }
+        this.add_child(this.box);
     }
     pauseScrolling() {
         this.transition?.pause();
@@ -64,8 +58,8 @@ class ScrollingLabel extends St.ScrollView {
         this.initPaused = false;
     }
     initScrolling() {
-        const adjustment = this.hscroll.adjustment;
-        const origText = this.label.text;
+        const adjustment = this.get_hadjustment();
+        const origText = this.label.text + "     ";
         this.onAdjustmentChangedId = adjustment.connect("changed", this.onAdjustmentChanged.bind(this, adjustment, origText));
         this.label.text = `${origText} `;
         this.label.clutterText.ellipsize = Pango.EllipsizeMode.NONE;
@@ -75,8 +69,12 @@ class ScrollingLabel extends St.ScrollView {
             return;
         }
 
-        const initial = adjustment.value;
-        const final = adjustment.upper;
+        const initial = new GObject.Value();
+        initial.init(GObject.TYPE_INT);
+        initial.set_int(adjustment.value);
+        const final = new GObject.Value();
+        final.init(GObject.TYPE_INT);
+        final.set_int(adjustment.upper);
         const duration = adjustment.upper / SCROLL_ANIMATION_SPEED;
         const pspec = adjustment.find_property("value");
         const interval = new Clutter.Interval({

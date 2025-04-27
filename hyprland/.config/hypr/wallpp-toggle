@@ -1,6 +1,6 @@
 #!/bin/bash
 
-liveWallpaper="mpvpaper -o \"loop-file --no-audio --video-zoom=0.2\" '*' ~/.local/share/backgrounds/vwallpp08.mp4 >> /dev/null &"
+liveWallpaper="mpvpaper -o \"loop-file --no-audio --video-zoom=0\" '*' ~/.local/share/backgrounds/vwallpp18.mp4 >> /dev/null &"
 
 # Check if mpvpaper is running
 mpv_running=$(pgrep -x mpvpaper >/dev/null && echo 1 || echo 0)

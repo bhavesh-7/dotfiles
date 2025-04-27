@@ -19,17 +19,12 @@ Gio._promisify(GdkPixbuf.Pixbuf, "new_from_stream_async", "new_from_stream_finis
 Gio._promisify(Gio.File.prototype, "query_info_async", "query_info_finish");
 
 function find_child_by_name(parent, name) {
-    if (Clutter.Container === undefined) {
-        const children = parent.get_children();
+    const children = parent.get_children();
 
-        for (const child of children) {
-            if (child.get_name() === name) {
-                return child;
-            }
+    for (const child of children) {
+        if (child.get_name() === name) {
+            return child;
         }
-    }
-    else {
-        return parent.find_child_by_name(name);
     }
 }
 
@@ -63,6 +58,7 @@ class PanelButton extends PanelMenu.Button {
         this.updateWidgets(WidgetFlags.ALL);
         this.addProxyListeners();
         this.initActions();
+        // @ts-expect-error
         this.menu.box.add_style_class_name("popup-menu-container");
         this.connect("destroy", this.onDestroy.bind(this));
     }
@@ -160,13 +156,14 @@ class PanelButton extends PanelMenu.Button {
         }
 
         if (this.menuBox.get_parent() == null) {
+            // @ts-expect-error
             this.menu.addMenuItem(this.menuBox);
         }
     }
     addMenuPlayers() {
         if (this.menuPlayers == null) {
             this.menuPlayers = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
             });
         }
 
@@ -368,7 +365,8 @@ class PanelButton extends PanelMenu.Button {
                 const height = width / aspectRatio;
                 const format = pixbuf.hasAlpha ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888;
                 const image = St.ImageContent.new_with_preferred_size(width, height);
-                image.set_bytes(pixbuf.pixelBytes, format, pixbuf.width, pixbuf.height, pixbuf.rowstride);
+                const context = global.stage.context.get_backend().get_cogl_context();
+                image.set_bytes(context, pixbuf.pixelBytes, format, pixbuf.width, pixbuf.height, pixbuf.rowstride);
                 this.menuImage.iconSize = -1;
                 this.menuImage.gicon = null;
                 this.menuImage.width = width;
@@ -395,7 +393,7 @@ class PanelButton extends PanelMenu.Button {
     addMenuLabels() {
         if (this.menuLabels == null) {
             this.menuLabels = new St.BoxLayout({
-                vertical: true,
+                orientation: Clutter.Orientation.VERTICAL,
             });
         }
 
@@ -691,6 +689,7 @@ class PanelButton extends PanelMenu.Button {
         return labelTextElements.join(" ");
     }
     getMenuItemWidth() {
+        // @ts-expect-error
         const menuContainer = this.menu.box.get_parent().get_parent();
         const minWidth = menuContainer.get_theme_node().get_min_width() - 24;
         return Math.max(minWidth, this.extension.labelWidth);

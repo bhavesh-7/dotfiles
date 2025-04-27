@@ -6,6 +6,7 @@ const SettingsPath = "org.gnome.shell.extensions.dim-completed-calendar-events";
 const StylePastDaysSetting = "style-past-days";
 const StyleOngoingEventsSetting = "style-ongoing-events";
 const HidePastEventsSetting = "hide-past-events";
+const HidePastEventsGracePeriodSetting = "hide-past-events-grace-period";
 
 class SettingsManager {
     constructor(settings) {
@@ -24,6 +25,10 @@ class SettingsManager {
         return this.settings.get_boolean(HidePastEventsSetting);
     }
 
+    getHidePastEventsGracePeriod() {
+        return this.settings.get_int(HidePastEventsGracePeriodSetting);
+    }
+
     setShouldStylePastDays(value) {
         this.settings.set_boolean(StylePastDaysSetting, value);
     }
@@ -34,6 +39,10 @@ class SettingsManager {
 
     setShouldHidePastEvents(value) {
         this.settings.set_boolean(HidePastEventsSetting, value);
+    }
+
+    setHidePastEventsGracePeriod(value) {
+        this.settings.set_int(HidePastEventsGracePeriodSetting, value);
     }
 
     connectToChanges(func) {
@@ -84,11 +93,34 @@ class Preferences extends ExtensionPreferences {
         });
         toggleHidePastEvents.connect("state-set", (_, state) => {
             settings.setShouldHidePastEvents(state);
+            rowHidePastEventsGracePeriodSetting.set_sensitive(state);
         });
         rowHidePastEventsSetting.add_suffix(toggleHidePastEvents);
         rowHidePastEventsSetting.activatable_widget = toggleHidePastEvents;
+        const rowHidePastEventsGracePeriodSetting = new Adw.ActionRow({
+            title: "Delay hiding past events (minutes)",
+            subtitle: "Useful to see events that are running late",
+        });
+        const gracePeriodAdjustment = new Gtk.Adjustment({
+            lower: 0,
+            upper: 60,
+            step_increment: 1,
+            page_increment: 10,
+            value: settings.getHidePastEventsGracePeriod(),
+        });
+        const inputHidePastEventsGracePeriod = new Gtk.SpinButton({
+            adjustment: gracePeriodAdjustment,
+            valign: Gtk.Align.CENTER,
+        });
+        inputHidePastEventsGracePeriod.connect("value-changed", (self) => {
+            settings.setHidePastEventsGracePeriod(self.get_value());
+        });
+        rowHidePastEventsGracePeriodSetting.add_suffix(inputHidePastEventsGracePeriod);
+        rowHidePastEventsGracePeriodSetting.activatable_widget =
+            inputHidePastEventsGracePeriod;
         group.add(rowPastDaySetting);
         group.add(rowHidePastEventsSetting);
+        group.add(rowHidePastEventsGracePeriodSetting);
         page.add(group);
     }
 

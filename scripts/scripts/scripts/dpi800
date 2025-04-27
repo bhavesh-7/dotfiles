@@ -1,0 +1,7 @@
+#!/bin/bash
+# This script needs distro bassed openrazer config and openrazer-daemon/meta to be installed
+# This script needs razer-cli to be installed
+
+mouseSerial=$(razer-cli -l | awk '/type: mouse/{flag=1} /serial:/&&flag{print $2; exit}')
+
+razer-cli -d "$mouseSerial" --dpi 800

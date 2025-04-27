@@ -10,10 +10,11 @@
   "shell-version": [
     "45",
     "46",
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/G-dH/windows-search-provider",
   "uuid": "windows-search-provider@G-dH.github.com",
-  "version": 23,
-  "version-name": "47.2"
+  "version": 24,
+  "version-name": "48.0"
 }

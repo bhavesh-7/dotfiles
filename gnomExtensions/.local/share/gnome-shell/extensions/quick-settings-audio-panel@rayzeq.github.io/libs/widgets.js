@@ -6,36 +6,14 @@ import Gvc from 'gi://Gvc';
 import St from 'gi://St';
 import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import { Ornament, PopupBaseMenuItem, PopupMenuItem, PopupMenuSection } from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import { MprisSource } from 'resource:///org/gnome/shell/ui/mpris.js';
+import { Ornament, PopupBaseMenuItem, PopupImageMenuItem, PopupMenuItem, PopupMenuSection } from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { QuickMenuToggle, QuickSlider, QuickToggle } from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
-import { get_pactl_path, spawn } from "./utils.js";
-export function waitProperty(object, name) {
-    if (!waitProperty.idle_ids) {
-        waitProperty.idle_ids = [];
-    }
-    return new Promise((resolve, _reject) => {
-        // very ugly hack
-        const id_pointer = {};
-        const id = GLib.idle_add(GLib.PRIORITY_DEFAULT, waitPropertyLoop.bind(this, resolve, id_pointer));
-        id_pointer.id = id;
-        waitProperty.idle_ids.push(id);
-    });
-    function waitPropertyLoop(resolve, pointer) {
-        if (object[name]) {
-            const index = waitProperty.idle_ids.indexOf(pointer.id);
-            if (index !== -1) {
-                waitProperty.idle_ids.splice(index, 1);
-            }
-            resolve(object[name]);
-            return GLib.SOURCE_REMOVE;
-        }
-        return GLib.SOURCE_CONTINUE;
-    }
-}
+import { get_pactl_path, spawn, wait_property } from "./utils.js";
 const { MixerSinkInput, MixerSink } = Gvc;
 // `_volumeOutput` is set in an async function, so we need to ensure that it's currently defined
-const OutputStreamSlider = (await waitProperty(Main.panel.statusArea.quickSettings, '_volumeOutput'))._output.constructor;
+const OutputStreamSlider = (await wait_property(Main.panel.statusArea.quickSettings, "_volumeOutput"))._output.constructor;
 const StreamSlider = Object.getPrototypeOf(OutputStreamSlider);
 export class SinkMixer {
     panel;
@@ -128,7 +106,7 @@ const SinkVolumeSlider = GObject.registerClass(class SinkVolumeSlider extends St
         const sliderBin = box.get_children()[1];
         box.remove_child(sliderBin);
         box.remove_child(this._menuButton);
-        const vbox = new St.BoxLayout({ vertical: true, x_expand: true });
+        const vbox = new St.BoxLayout({ orientation: Clutter.Orientation.VERTICAL, x_expand: true });
         box.insert_child_at_index(vbox, 1);
         const label = new St.Label({ natural_width: 0 });
         label.style_class = "QSAP-application-volume-slider-label";
@@ -145,7 +123,9 @@ const SinkVolumeSlider = GObject.registerClass(class SinkVolumeSlider extends St
                         this._name_binding.unbind();
                     // using the text from the output switcher of the master slider to allow compatibility with extensions
                     // that changes it (like Quick Settings Audio Device Renamer)
-                    this._name_binding = Main.panel.statusArea.quickSettings._volumeOutput._output._deviceItems.get(device.get_id()).label.bind_property('text', label, 'text', GObject.BindingFlags.SYNC_CREATE);
+                    const deviceItem = Main.panel.statusArea.quickSettings._volumeOutput._output._deviceItems.get(device.get_id());
+                    if (deviceItem)
+                        this._name_binding = deviceItem.label.bind_property('text', label, 'text', GObject.BindingFlags.SYNC_CREATE);
                 };
                 let signal = stream.connect("notify::port", updater);
                 updater();
@@ -219,7 +199,7 @@ export const BalanceSlider = GObject.registerClass(class BalanceSlider extends Q
         // creating an additional vbox instead of setting `box` as vertical is necessary
         // because the second solution will add some spacing between the title and the slider
         // and I don't know how to remove it
-        const vbox = new St.BoxLayout({ vertical: true, x_expand: true });
+        const vbox = new St.BoxLayout({ orientation: Clutter.Orientation.VERTICAL, x_expand: true });
         vbox.add_child(title);
         vbox.add_child(hbox);
         box.add_child(vbox);
@@ -384,9 +364,9 @@ class ApplicationsMixerManager {
         this.on_slider_added(slider);
     }
     _stream_removed(_control, id) {
-        if (!this._sliders.has(id))
-            return;
         const slider = this._sliders.get(id);
+        if (slider === undefined)
+            return;
         this.on_slider_removed(slider);
         this._sliders.delete(id);
         slider.destroy();
@@ -525,7 +505,7 @@ const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSli
         box.remove_child(sliderBin);
         const menu_button_visible = this._menuButton.visible;
         box.remove_child(this._menuButton);
-        const vbox = new St.BoxLayout({ vertical: true, x_expand: true });
+        const vbox = new St.BoxLayout({ orientation: Clutter.Orientation.VERTICAL, x_expand: true });
         box.insert_child_at_index(vbox, 1);
         const hbox = new St.BoxLayout();
         hbox.add_child(sliderBin);
@@ -558,6 +538,29 @@ const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSli
             }
         });
     }
+    _addDevice(id) {
+        if (this._deviceItems.has(id))
+            return;
+        const device = this._lookupDevice(id);
+        if (!device)
+            return;
+        const item = new PopupImageMenuItem("", device.get_gicon());
+        // using the text from the output switcher of the master slider to allow compatibility with extensions
+        // that changes it (like Quick Settings Audio Device Renamer)
+        const deviceItem = Main.panel.statusArea.quickSettings._volumeOutput._output._deviceItems.get(device.get_id());
+        if (deviceItem)
+            deviceItem.label.bind_property('text', item.label, 'text', GObject.BindingFlags.SYNC_CREATE);
+        item.connect('activate', () => {
+            const dev = this._lookupDevice(id);
+            if (dev)
+                this._activateDevice(dev);
+            else
+                console.warn(`Trying to activate invalid device ${id}`);
+        });
+        this._deviceSection.addMenuItem(item);
+        this._deviceItems.set(id, item);
+        this._sync();
+    }
     _lookupDevice(id) {
         return this._control.lookup_output_id(id);
     }
@@ -574,5 +577,37 @@ const ApplicationVolumeSliderItem = GObject.registerClass(class ApplicationVolum
         // another menu
         slider._menuButton.get_parent().remove_child(slider._menuButton);
         this.add_child(slider);
+    }
+});
+export const MprisList = GObject.registerClass(class MprisList extends St.BoxLayout {
+    // MediaMessage isn't exported, gotta get creative
+    static MediaMessage = GObject.type_from_name("Gjs_ui_messageList_MediaMessage");
+    source;
+    messages;
+    constructor() {
+        super({
+            orientation: Clutter.Orientation.VERTICAL,
+            style: 'spacing: 12px;',
+        });
+        this.messages = new Map();
+        this.source = new MprisSource();
+        this.source.connectObject('player-added', (_, player) => this._add_player(player), 'player-removed', (_, player) => this._remove_player(player), this);
+        this.source.players.forEach(player => {
+            this._add_player(player);
+        });
+    }
+    _add_player(player) {
+        if (!this.messages.has(player)) {
+            const message = GObject.Object.new(MprisList.MediaMessage, player);
+            this.add_child(message);
+            this.messages.set(player, message);
+        }
+    }
+    _remove_player(player) {
+        const message = this.messages.get(player);
+        if (message) {
+            this.remove_child(message);
+            this.messages.delete(player);
+        }
     }
 });

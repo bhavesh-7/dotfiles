@@ -5,9 +5,10 @@
   "shell-version": [
     "45",
     "46",
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/shaquibimdad/gnome_ext_volume_boost",
   "uuid": "boostvolume@shaquib.dev",
-  "version": 8
+  "version": 10
 }

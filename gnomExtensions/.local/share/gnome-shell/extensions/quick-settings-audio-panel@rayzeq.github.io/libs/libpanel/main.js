@@ -6,12 +6,12 @@ import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
+import { InjectionManager } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { BoxPointer, PopupAnimation } from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { PopupMenu } from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import { QuickSettingsMenu } from 'resource:///org/gnome/shell/ui/quickSettings.js';
-import { Patcher } from './patcher.js';
 import { add_named_connections, array_insert, array_remove, find_panel, get_extension_uuid, get_settings, rsplit, set_style, split } from './utils.js';
 const MenuManager = Main.panel.menuManager;
 const QuickSettings = Main.panel.statusArea.quickSettings;
@@ -122,15 +122,12 @@ const GridItem = superclass => {
         return GridItem.cache[superclass.name];
     const klass = registerClass({
         GTypeName: `LibPanel_GridItem_${superclass.name}`,
-        Properties: {
-            'draggable': GObject.ParamSpec.boolean('draggable', 'draggable', 'Whether this widget can be dragged', GObject.ParamFlags.READWRITE, true),
-        },
     }, class extends superclass {
         constructor(panel_name, ...args) {
             super(...args);
             this.is_grid_item = true;
             this.panel_name = panel_name;
-            this._drag_handle = DND.makeDraggable(this);
+            this._drag_handle = DND.makeDraggable(this, {});
             this.connect_named(this._drag_handle, 'drag-begin', () => {
                 QuickSettings.menu.transparent = false;
                 // Prevent the first column from disapearing if it only contains `this`
@@ -192,13 +189,6 @@ const GridItem = superclass => {
                     this._drag_monitor = undefined;
                 }
             });
-        }
-        get draggable() {
-            return this._drag_handle._disabled || false;
-        }
-        set draggable(value) {
-            this._drag_handle._disabled = value;
-            this.notify('draggable');
         }
         _on_drag_motion(event) {
             if (event.source !== this)
@@ -411,7 +401,7 @@ class PanelGrid extends PopupMenu {
         this.actor.reactive = true;
         // =======================================================================================
         this.box._delegate = this; // this used so columns can get `this` using `column.get_parent()._delegate`
-        this.box.vertical = false;
+        this.box.orientation = Clutter.Orientation.HORIZONTAL;
         this._panel_style_class = this.box.style_class; // we save the style class that's used to make a nice panel
         this.box.style_class = ''; // and we remove it so it's invisible
         this.box.style = `spacing: ${GRID_SPACING}px`;
@@ -550,12 +540,12 @@ class PanelGrid extends PopupMenu {
 }
 const PanelColumn = registerClass(class PanelColumn extends Semitransparent(St.BoxLayout) {
     constructor(valign, layout = []) {
-        super({ y_align: Clutter.ActorAlign.FILL, vertical: true });
+        super({ y_align: Clutter.ActorAlign.FILL, orientation: Clutter.Orientation.VERTICAL });
         this._delegate = this;
         this.is_panel_column = true; // since we can't use instanceof, we use this attribute
         this._panel_layout = layout;
         // `this` takes up the whole screen height, while `this._inner` is vertically aligned and contains items
-        this._inner = new St.BoxLayout({ y_expand: true, vertical: true, style: `spacing: ${GRID_SPACING}px` });
+        this._inner = new St.BoxLayout({ y_expand: true, orientation: Clutter.Orientation.VERTICAL, style: `spacing: ${GRID_SPACING}px` });
         this._inner._delegate = this;
         this.add_child(this._inner);
         this._set_valign(valign);
@@ -849,7 +839,7 @@ export class LibPanel {
         let instance = LibPanel.get_instance();
         if (!instance) {
             instance = Main.panel._libpanel = new LibPanel();
-            instance._enable();
+            instance._late_init();
         }
         ;
         if (instance.constructor.VERSION != VERSION)
@@ -866,7 +856,7 @@ export class LibPanel {
         if (index > -1)
             instance._enablers.splice(index, 1);
         if (instance._enablers.length === 0) {
-            instance._disable();
+            instance._destroy();
             Main.panel._libpanel = undefined;
         }
         ;
@@ -889,28 +879,18 @@ export class LibPanel {
         panel.get_parent()?.remove_child(panel);
         panel._keep_layout = undefined;
     }
+    _enablers;
+    _settings;
+    _injection_manager;
     constructor() {
         this._enablers = [];
-        this._patcher = null;
-        this._settings = null;
-        this._panel_grid = null;
-        this._old_menu = null;
-    }
-    _enable() {
         const this_path = '/' + split(rsplit(import.meta.url, '/', 1)[0], '/', 3)[3];
         ;
         this._settings = get_settings(`${this_path}/org.gnome.shell.extensions.libpanel.gschema.xml`);
-        // ======================== Patching ========================
-        this._patcher = new Patcher();
-        // Permit disabling widget dragging
-        const _Draggable = DND.makeDraggable(new St.Widget()).constructor;
-        this._patcher.replace_method(_Draggable, function _grabActor(wrapped, device, touchSequence) {
-            if (this._disabled)
-                return;
-            wrapped(device, touchSequence);
-        });
-        // Add named connections to objects
-        add_named_connections(this._patcher, GObject.Object);
+        this._injection_manager = new InjectionManager();
+        add_named_connections(this._injection_manager, GObject.Object);
+    }
+    _late_init() {
         // =================== Replacing the popup ==================
         this._settings.connect('changed::alignment', () => {
             this._panel_grid._set_alignment(this._settings.get_string('alignment'));
@@ -989,16 +969,14 @@ export class LibPanel {
         this._settings.get_int('row-spacing');
         this._settings.get_int('column-spacing');
     }
-    ;
-    _disable() {
+    _destroy() {
         this._move_quick_settings(this._main_panel, this._old_menu);
         this._replace_menu(this._old_menu);
         this._old_menu = null;
         this._panel_grid.destroy();
         this._panel_grid = null;
         this._settings = null;
-        this._patcher.unpatch_all();
-        this._patcher = null;
+        this._injection_manager.clear();
     }
     _replace_menu(new_menu) {
         const old_menu = QuickSettings.menu;

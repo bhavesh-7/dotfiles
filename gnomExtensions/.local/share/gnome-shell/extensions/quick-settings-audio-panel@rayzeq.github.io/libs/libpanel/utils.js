@@ -1,14 +1,17 @@
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 const Config = await import("resource:///org/gnome/shell/misc/config.js").catch(async () => await import("resource:///org/gnome/Shell/Extensions/js/misc/config.js"));
+/** Python-like split */
 export function split(string, sep, maxsplit) {
     const splitted = string.split(sep);
     return maxsplit ? splitted.slice(0, maxsplit).concat([splitted.slice(maxsplit).join(sep)]) : splitted;
 }
+/** Python-like rsplit */
 export function rsplit(string, sep, maxsplit) {
     const splitted = string.split(sep);
     return maxsplit ? [splitted.slice(0, -maxsplit).join(sep)].concat(splitted.slice(-maxsplit)) : splitted;
 }
+/** Removes an item from an array */
 export function array_remove(array, item) {
     const index = array.indexOf(item);
     if (index > -1) {
@@ -17,6 +20,7 @@ export function array_remove(array, item) {
     }
     return false;
 }
+/** Insert one or more items in an array at a specific index */
 export function array_insert(array, index, ...items) {
     array.splice(index, 0, ...items);
 }
@@ -41,7 +45,7 @@ export function get_shell_version() {
     const [major, minor] = Config.PACKAGE_VERSION.split('.').map(s => Number(s));
     return { major, minor };
 }
-export function add_named_connections(patcher, object) {
+export function add_named_connections(injector, object) {
     // this is used to debug things
     /*function _get_address(object) {
         return object.toString().slice(1, 15);
@@ -88,13 +92,13 @@ export function add_named_connections(patcher, object) {
         callback_map.set(callback, id);
         return id + 100000; // this is just here to prevent any accidental usage of this id with normal disconnect
     }
-    patcher.replace_method(object, function connect_named(_wrapped, source, signal, callback) {
+    injector.overrideMethod(object.prototype, "connect_named", _wrapped => function (source, signal, callback) {
         return set_signal(this, source, signal, callback, source.connect(signal, callback));
     });
-    patcher.replace_method(object, function connect_after_named(_wrapped, source, signal, callback) {
+    injector.overrideMethod(object.prototype, "connect_after_named", _wrapped => function (source, signal, callback) {
         return set_signal(this, source, signal, callback, source.connect_after(signal, callback));
     });
-    patcher.replace_method(object, function disconnect_named(_wrapped, source = undefined, signal = undefined, callback = undefined) {
+    injector.overrideMethod(object.prototype, "disconnect_named", _wrapped => function (source = undefined, signal = undefined, callback = undefined) {
         if (typeof source === 'number') {
             // The function was called with an id.
             const id_to_remove = source - 100000;

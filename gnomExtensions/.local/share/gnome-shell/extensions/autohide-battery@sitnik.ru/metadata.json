@@ -10,9 +10,10 @@
   "shell-version": [
     "45",
     "46",
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/ai/autohide-battery",
   "uuid": "autohide-battery@sitnik.ru",
-  "version": 55
+  "version": 56
 }

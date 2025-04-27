@@ -7,9 +7,10 @@
   "settings-schema-path": "schemas/",
   "shell-version": [
     "46",
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/metehan-arslan/gnome-compact-top-bar",
   "uuid": "gnome-compact-top-bar@metehan-arslan.github.io",
-  "version": 10
+  "version": 12
 }

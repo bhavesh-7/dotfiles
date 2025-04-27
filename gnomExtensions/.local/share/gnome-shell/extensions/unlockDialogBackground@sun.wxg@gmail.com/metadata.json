@@ -11,9 +11,10 @@
   ],
   "settings-schema": "org.gnome.shell.extensions.unlockDialogBackground",
   "shell-version": [
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://github.com/sunwxg/gnome-shell-extension-unlockDialogBackground",
   "uuid": "unlockDialogBackground@sun.wxg@gmail.com",
-  "version": 37
+  "version": 38
 }

@@ -7,9 +7,10 @@
   "shell-version": [
     "45",
     "46",
-    "47"
+    "47",
+    "48"
   ],
   "url": "https://gitlab.com/metal03326/gnome-frequency-boost-switch",
   "uuid": "freq-boost-switch@metal03326",
-  "version": 22
+  "version": 23
 }

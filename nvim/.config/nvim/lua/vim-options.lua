@@ -7,6 +7,8 @@ vim.g.mapleader = " "
 vim.api.nvim_set_keymap("t", "<Esc>", [[<C-\><C-n>]], { noremap = true, silent = true })
 vim.wo.number = true
 
+vim.opt.shell = "/bin/zsh"
+
 -- Vim Pane Split
 vim.keymap.set("n", "<leader>h", ":vsp<CR>")
 vim.keymap.set("n", "<leader>v", ":sp<CR>")
