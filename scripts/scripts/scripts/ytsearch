@@ -1,0 +1,58 @@
+#!/bin/bash
+
+source "$(dirname "$0")/../lib/formats.sh"
+source "$(dirname "$0")/../lib/stream.sh"
+
+ytsearch() {
+  local query="$*"
+  if [[ -z "$query" ]]; then
+    read -p "Enter your YouTube search query: " query
+  fi
+
+  local per_page=5 offset=0
+  local titles=() ids=() selection=""
+
+  echo -e "🔍 Searching YouTube for: \"$query\"\n"
+
+  while true; do
+    mapfile -t batch < <(yt-dlp "ytsearch$((offset + per_page)):$query" \
+      --flat-playlist --print "%(title)s|||%(id)s" 2>/dev/null)
+    batch=("${batch[@]:$offset}")
+
+    [[ ${#batch[@]} -eq 0 ]] && echo "❌ No more results." && break
+
+    for line in "${batch[@]}"; do
+      titles+=("${line%%|||*}")
+      ids+=("${line##*|||}")
+    done
+
+    result_list=()
+    for ((i = 0; i < ${#titles[@]}; i++)); do
+      result_list+=("$((i + 1)). ${titles[$i]}")
+    done
+    result_list+=("[m] More results" "[q] Quit")
+
+    selection=$(printf "%s\n" "${result_list[@]}" | fzf --height 40% --ansi --preview "echo {}")
+
+    case "$selection" in
+      "[q] Quit") echo "👋 Exiting."; break ;;
+      "[m] More results") offset=$((offset + per_page)); continue ;;
+    esac
+
+    [[ "$selection" =~ ^([0-9]+)\. ]] || { echo "❌ Invalid selection."; continue; }
+    local index="${BASH_REMATCH[1]}" video_id="${ids[$((index - 1))]}"
+    local url="https://www.youtube.com/watch?v=$video_id"
+
+    echo -e "\nPlay [v]ideo or [a]udio only?"
+    read -r mode
+
+    case "$mode" in
+      a) stream_audio "$url" ;;
+      v) stream_video_with_selection "$url" ;;
+      *) echo "❌ Invalid choice."; continue ;;
+    esac
+    break
+  done
+}
+
+ytsearch "$@"

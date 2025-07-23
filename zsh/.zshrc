@@ -152,3 +152,18 @@ fi
 unset __conda_setup
 # <<< conda initialize <<<
 #
+
+# Pyenv configuration
+export PYENV_ROOT="$HOME/pyenv/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+#eval "$(pyenv virtualenv-init -)"
+
+
+cddir() {
+  if [ -z "$1" ]; then
+    echo "Usage: cddir <directory>"
+    return 1
+  fi
+  mkdir -p "$1" && cd "$1"
+}

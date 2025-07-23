@@ -21,10 +21,12 @@ export class SinkMixer {
     _sliders_ordered;
     _filter_mode;
     _filters;
+    _change_button;
+    _change_menu;
     _mixer_control;
     _sa_event_id;
     _sr_event_id;
-    constructor(panel, index, filter_mode, filters) {
+    constructor(panel, index, filter_mode, filters, change_button, change_menu) {
         this.panel = panel;
         // Empty actor used to know where to place sliders
         const placeholder = new Clutter.Actor({ visible: false });
@@ -33,6 +35,8 @@ export class SinkMixer {
         this._sliders_ordered = [placeholder];
         this._filter_mode = filter_mode;
         this._filters = filters.map(f => new RegExp(f));
+        this._change_button = change_button;
+        this._change_menu = change_menu;
         this._mixer_control = Volume.getMixerControl();
         this._sa_event_id = this._mixer_control.connect("stream-added", this._stream_added.bind(this));
         this._sr_event_id = this._mixer_control.connect("stream-removed", this._stream_removed.bind(this));
@@ -57,7 +61,7 @@ export class SinkMixer {
         }
         if (!matched && this._filter_mode === 'whitelist')
             return;
-        const slider = new SinkVolumeSlider(this._mixer_control, stream);
+        const slider = new SinkVolumeSlider(this._mixer_control, stream, this._change_button, this._change_menu);
         this._sliders.set(id, slider);
         this.panel.addItem(slider, 2);
         this.panel._grid.set_child_above_sibling(slider, this._sliders_ordered.at(-1));
@@ -89,7 +93,8 @@ const SinkVolumeSlider = GObject.registerClass(class SinkVolumeSlider extends St
     _hasHeadphones;
     _setup_timeout;
     _name_binding;
-    constructor(control, stream) {
+    _change_button_update_handler_id;
+    constructor(control, stream, change_button, change_menu) {
         super(control);
         this._icons = [
             'audio-volume-muted-symbolic',
@@ -105,11 +110,64 @@ const SinkVolumeSlider = GObject.registerClass(class SinkVolumeSlider extends St
         const box = this.child;
         const sliderBin = box.get_children()[1];
         box.remove_child(sliderBin);
-        box.remove_child(this._menuButton);
+        if (!(change_button && change_menu && stream.get_ports().length > 0)) {
+            box.remove_child(this._menuButton);
+        }
         const vbox = new St.BoxLayout({ orientation: Clutter.Orientation.VERTICAL, x_expand: true });
         box.insert_child_at_index(vbox, 1);
         const label = new St.Label({ natural_width: 0 });
         label.style_class = "QSAP-application-volume-slider-label";
+        let update_change_button = undefined;
+        if (change_button) {
+            if (change_menu && stream.get_ports().length > 0) {
+                this.menuEnabled = true;
+                this._menuButton.y_expand = false;
+                this._menuButton.y_align = Clutter.ActorAlign.CENTER;
+                for (const port of stream.get_ports()) {
+                    const item = new PopupMenuItem(port.human_port);
+                    this._deviceSection.addMenuItem(item);
+                    item.connect("activate", () => {
+                        stream.change_port(port.port);
+                        control.change_output(control.lookup_device_from_stream(stream));
+                    });
+                    this._deviceItems.set(port.port, item);
+                }
+                update_change_button = (_, output_id) => {
+                    const ui_device = control.lookup_output_id(output_id);
+                    if (ui_device.stream_id === stream.id)
+                        for (const [port, item] of this._deviceItems) {
+                            item.setOrnament(port === ui_device.port_name
+                                ? Ornament.CHECK
+                                : Ornament.NONE);
+                        }
+                    else
+                        this._setActiveDevice(-1);
+                };
+            }
+            else {
+                const select_default_button = new St.Button({
+                    child: new St.Icon({ icon_name: "object-select-symbolic" }),
+                    toggle_mode: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    style_class: "icon-button flat"
+                });
+                select_default_button.connect("clicked", () => {
+                    if (control.get_default_sink() === this.stream) {
+                        select_default_button.checked = true;
+                    }
+                    else {
+                        control.change_output(control.lookup_device_from_stream(stream));
+                        select_default_button.checked = false;
+                    }
+                });
+                box.add_child(select_default_button);
+                update_change_button = (_, output_id) => {
+                    const ui_device = control.lookup_output_id(output_id);
+                    select_default_button.checked = ui_device.stream_id === stream.id;
+                };
+            }
+            this._change_button_update_handler_id = control.connect("active-output-update", update_change_button);
+        }
         const setup = () => {
             clearTimeout(this._setup_timeout);
             if (!control.lookup_device_from_stream(stream)) {
@@ -119,6 +177,8 @@ const SinkVolumeSlider = GObject.registerClass(class SinkVolumeSlider extends St
                 this._setup_timeout = undefined;
                 const updater = () => {
                     const device = control.lookup_device_from_stream(stream);
+                    if (update_change_button)
+                        update_change_button(null, control.lookup_device_from_stream(control.get_default_sink()).get_id());
                     if (this._name_binding)
                         this._name_binding.unbind();
                     // using the text from the output switcher of the master slider to allow compatibility with extensions
@@ -152,6 +212,8 @@ const SinkVolumeSlider = GObject.registerClass(class SinkVolumeSlider extends St
         if (this._setup_timeout) {
             clearTimeout(this._setup_timeout);
         }
+        if (this._change_button_update_handler_id)
+            this._control.disconnect(this._change_button_update_handler_id);
         super.destroy();
     }
 });
@@ -470,6 +532,7 @@ export const ApplicationsMixerToggle = GObject.registerClass(class ApplicationsM
 const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSlider extends StreamSlider {
     _pactl_path;
     _pactl_path_changed_id;
+    _label;
     constructor(control, stream, settings) {
         super(control);
         this.menu.setHeader('audio-headphones-symbolic', _('Output Device'));
@@ -513,17 +576,28 @@ const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSli
         this._menuButton.visible = menu_button_visible; // we need to reset `actor.visible` when changing parent
         // this prevent the tall panel bug when the button is shown
         this._menuButton.y_expand = false;
-        const label = new St.Label({ natural_width: 0 });
-        label.style_class = "QSAP-application-volume-slider-label";
-        stream.bind_property_full('description', label, 'text', GObject.BindingFlags.SYNC_CREATE, (_binding, _from, _to) => {
-            return [true, this._get_label_text(stream)];
-        }, null);
-        vbox.add_child(label);
+        this._label = new St.Label({ natural_width: 0 });
+        this._label.style_class = "QSAP-application-volume-slider-label";
+        const n_desc_handler_id = stream.connect("notify::description", stream => this._update_label(stream));
+        this.connect("destroy", () => stream.disconnect(n_desc_handler_id));
+        this._update_label(stream);
+        vbox.add_child(this._label);
         vbox.add_child(hbox);
     }
-    _get_label_text(stream) {
+    _update_label(stream) {
         const { name, description } = stream;
-        return name === null ? description : `${name} - ${description}`;
+        this._label.text = name === null ? description : `${name} - ${description}`;
+        if (name && name.startsWith("Chromium") && this._pactl_path) {
+            spawn([this._pactl_path, "-f", "json", "list", "sink-inputs"]).then(stdout_str => {
+                const stdout = JSON.parse(stdout_str);
+                for (const sink_input of stdout) {
+                    const binary_name = sink_input.properties["application.process.binary"];
+                    if (sink_input.index === this.stream.index && binary_name !== "chromium-browser") {
+                        this._label.text = `${binary_name} - ${description}`;
+                    }
+                }
+            });
+        }
     }
     _checkUsedSink() {
         spawn([this._pactl_path, "-f", "json", "list", "sink-inputs"]).then(stdout_str => {
@@ -588,6 +662,7 @@ export const MprisList = GObject.registerClass(class MprisList extends St.BoxLay
         super({
             orientation: Clutter.Orientation.VERTICAL,
             style: 'spacing: 12px;',
+            visible: false
         });
         this.messages = new Map();
         this.source = new MprisSource();
@@ -601,6 +676,7 @@ export const MprisList = GObject.registerClass(class MprisList extends St.BoxLay
             const message = GObject.Object.new(MprisList.MediaMessage, player);
             this.add_child(message);
             this.messages.set(player, message);
+            this.visible = true;
         }
     }
     _remove_player(player) {
@@ -608,6 +684,8 @@ export const MprisList = GObject.registerClass(class MprisList extends St.BoxLay
         if (message) {
             this.remove_child(message);
             this.messages.delete(player);
+            if (this.messages.size === 0)
+                this.visible = false;
         }
     }
 });

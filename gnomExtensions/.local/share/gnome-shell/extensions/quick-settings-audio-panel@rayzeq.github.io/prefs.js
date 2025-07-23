@@ -73,6 +73,16 @@ export default class QSAPPreferences extends ExtensionPreferences {
             title: _("Auto-hide"),
             subtitle: _("Hide the profile switcher when the current device only has one profile")
         });
+        const perdevice_volume_sliders_group = new ListBox(settings);
+        perdevice_volume_sliders_group.add_switch("perdevice-volume-sliders-change-button", {
+            title: _("Add a 'set as active' button"),
+            subtitle: _(`This button, added on each device slider, has the same effect as clicking on that device in the main volume slider menu`)
+        });
+        const perdevice_volume_sliders_change_menu = perdevice_volume_sliders_group.add_switch("perdevice-volume-sliders-change-menu", {
+            title: _("Replace the 'set as active' button with a submenu"),
+            subtitle: _(`For devices which have multiple ports, the button will be replaced by a submenu to choose which port will be active`)
+        });
+        settings.bind("perdevice-volume-sliders-change-button", perdevice_volume_sliders_change_menu, "sensitive", Gio.SettingsBindFlags.DEFAULT);
         const mpris_controllers_group = new ListBox(settings);
         mpris_controllers_group.add_switch("mpris-controllers-are-moved", {
             title: _("Move media controls"),
@@ -100,7 +110,8 @@ export default class QSAPPreferences extends ExtensionPreferences {
             .add_switch("move-output-volume-slider");
         widgets_order_group
             .add_reorderable("perdevice-volume-sliders", { title: _("Per-device volume sliders") })
-            .add_switch("create-perdevice-volume-sliders");
+            .add_switch("create-perdevice-volume-sliders")
+            .add_subgroup(perdevice_volume_sliders_group);
         const balance_slider = widgets_order_group
             .add_reorderable("balance-slider", { title: _("Audio balance slider") })
             .add_switch("create-balance-slider");

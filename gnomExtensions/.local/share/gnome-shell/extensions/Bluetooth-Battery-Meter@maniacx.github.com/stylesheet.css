@@ -1,3 +1,74 @@
 .bbm-bt-percentage-label {
   text-align: center;
 }
+.bbm-panel-title-label {
+  font-weight: bold;
+  text-align: center;
+  padding: 4px;
+}
+.bbm-popup-menu {
+  min-width: 15em;
+  background-color: rgba(128, 128, 128, 0);
+}
+.bbm-popup-menu:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+.bbm-popup-menu:focus {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+.bbm-panel-label-model {
+  padding-top: 2px;
+  padding-bottom: 8px;
+  font-weight: bold;
+}
+.bbm-panel-icon-check {
+  padding: 0.5em;
+}
+.bbm-panel-hbox {
+  padding-top: 2px;
+  padding-bottom: 2px;
+} 
+.bbm-panel-start-bin {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.bbm-panel-button-box {
+  padding-top: 8px;
+  padding-bottom: 2px;
+}
+.bbm-battery-veritcal-widget-label{
+  padding-top: 4px;
+  font-size: 0.75em;
+  text-align: center;
+}
+.bbm-battery-vertical-widget-box {
+  min-width: 5em;
+}
+.bbm-battery-vertical-space-bin {
+  min-width: 20px
+}
+.bbm-toggle-bin {
+  border-radius: 4px;
+  background-color: rgba(128, 128, 128, 0.3);
+}
+.bbm-toggle-button {
+  min-height: 28px;
+  min-width: 25px
+}
+.bbm-toggle-button:hover {
+  border-radius: 4px;
+  background-color: rgba(128, 128, 128, 0.4);
+}
+.bbm-toggle-button:checked {
+  border-radius: 4px;
+  background-color: rgba(128, 128, 128, 0.9);
+}
+.bbm-separator {
+  min-width: 0.5px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+}
+
+
+
+

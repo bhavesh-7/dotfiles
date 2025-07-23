@@ -1,9 +1,20 @@
+/** @import { Enum } from '../misc.js' */
+
 export const DBUS_IFACE_NAME = "org.freedesktop.DBus";
 export const MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2";
 export const DBUS_OBJECT_PATH = "/org/freedesktop/DBus";
 export const MPRIS_IFACE_NAME = "org.mpris.MediaPlayer2";
 export const DBUS_PROPERTIES_IFACE_NAME = "org.freedesktop.DBus.Properties";
 export const MPRIS_PLAYER_IFACE_NAME = "org.mpris.MediaPlayer2.Player";
+
+/** @typedef {Enum<typeof PanelElements>} PanelElements */
+/** @typedef {Enum<typeof LabelTypes>} LabelTypes */
+/** @typedef {Enum<typeof ExtensionPositions>} ExtensionPositions */
+/** @typedef {Enum<typeof MouseActions>} MouseActions */
+/** @typedef {Enum<typeof LoopStatus>} LoopStatus */
+/** @typedef {Enum<typeof PlaybackStatus>} PlaybackStatus */
+/** @typedef {Enum<typeof WidgetFlags>} WidgetFlags */
+
 export const PlaybackStatus = {
     PLAYING: "Playing",
     PAUSED: "Paused",

@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+
+import asyncio
+import os
+import sys
+from tapo import ApiClient
+
+IP = os.getenv("TAPO_IP", "10.30.40.51")
+USER = os.getenv("TAPO_USER", "rohitommishra43@gmail.com")
+PASS = os.getenv("TAPO_PASS", "TREmox43")
+async def main():
+    if len(sys.argv) != 2:
+        print("Usage: tapo_control.py [on|off|status]")
+        return
+
+    cmd = sys.argv[1].lower()
+    client = ApiClient(USER, PASS)
+    device = await client.p110(IP)
+
+    if cmd == "on":
+        await device.on()
+        print("✅ Plug turned ON")
+    elif cmd == "off":
+        await device.off()
+        print("✅ Plug turned OFF")
+    elif cmd == "status":
+        info = await device.get_device_info()
+        usage = await device.get_energy_usage()
+        state = "ON" if info.device_on else "OFF"
+        print(f"📟 Plug is currently: {state}")
+        print(f"⚡ Current power usage: {usage.current_power/1000} W")
+    else:
+        print("Unknown command:", cmd)
+
+if __name__ == "__main__":
+    asyncio.run(main())

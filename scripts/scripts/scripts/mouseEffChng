@@ -7,9 +7,22 @@ mouseSerial=$(razer-cli -l | awk '/type: mouse/{flag=1} /serial:/&&flag{print $2
 # Capture the initial effect value (string)
 effect=$(razer-cli -d "$mouseSerial" -l | grep "effect" | awk '{print $2}' | grep -v "available:")
 
-# Set conditions to toggle between the two effects
-if [ "$effect" == "static" ]; then
-    razer-cli -d "$mouseSerial" -e none
+# Manually change the mouse effect though the $1 argument, like (mouseEffChng static will set the effect to static, mouseEffChng none will set the effect to none, mouseEffChng cycle will set the effect to cycle, and if no argument is given it will toggle between static and none)
+
+if [ -z "$1" ]; then
+    # If no argument is given, toggle between static and none
+    if [ "$effect" == "static" ]; then
+        effect="none"
+    else
+        effect="static"
+    fi
 else
-    razer-cli -d "$mouseSerial" -e static
+    # Use the provided argument to set the effect
+    if [ "$1"==cycle ]; then
+        effect="breath_single"
+    else
+        effect="$1"
+    fi
 fi
+
+razer-cli -d "$mouseSerial" -e "$effect"

@@ -1,0 +1,15 @@
+#!/bin/bash
+# This script needs distro bassed openrazer config and openrazer-daemon/meta to be installed
+# This script needs razer-cli to be installed
+
+mouseSerial=$(razer-cli -l | awk '/type: mouse/{flag=1} /serial:/&&flag{print $2; exit}')
+
+new_brightness=$1
+
+if [ "$new_brightness" -lt 0 ]; then
+  echo "Too dark. Setting to 0."
+  new_brightness=0
+fi
+
+# Execute the command with the new brightness value
+razer-cli -d "$mouseSerial" -b "$new_brightness"

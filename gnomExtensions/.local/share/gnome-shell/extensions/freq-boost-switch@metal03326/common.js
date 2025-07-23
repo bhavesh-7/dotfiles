@@ -2,7 +2,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
 const CPU_INTEL         = 0;
-// acpi-cpufreq/amd-pstate
+// acpi-cpufreq/amd-pstate/amd-pstate-epp
 const CPU_AMD           = 1;
 const CPU_NOT_SUPPORTED = 2;
 
@@ -16,7 +16,7 @@ function getMyCpuType()
 		{
 			return CPU_INTEL;
 		}
-		else if ( [ 'amd-pstate', 'acpi-cpufreq' ].includes( driver ) && bashSyncCommand( 'cat /sys/devices/system/cpu/cpufreq/boost' ) )
+		else if ( [ 'amd-pstate', 'amd-pstate-epp', 'acpi-cpufreq' ].includes( driver ) && bashSyncCommand( 'cat /sys/devices/system/cpu/cpufreq/boost' ) )
 		{
 			return CPU_AMD;
 		}

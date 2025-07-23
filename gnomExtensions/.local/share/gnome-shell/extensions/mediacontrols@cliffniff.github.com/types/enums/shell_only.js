@@ -1,4 +1,7 @@
+/** @import { Enum } from '../misc.js' */
+
 import Clutter from "gi://Clutter";
+
 export const ControlIconOptions = {
     LOOP_NONE: {
         name: "loop",
@@ -129,3 +132,28 @@ export const ControlIconOptions = {
         },
     },
 };
+
+/** @typedef {Enum<typeof ControlIconOptions>} ControlIconOptions */
+
+/**
+ * @typedef {(typeof ControlIconOptions)[
+ *     | "LOOP_NONE"
+ *     | "LOOP_TRACK"
+ *     | "LOOP_PLAYLIST"
+ *     | "PREVIOUS"
+ *     | "PLAY"
+ *     | "PAUSE"
+ *     | "NEXT"
+ *     | "SHUFFLE_ON"
+ *     | "SHUFFLE_OFF"]} MenuControlIconOptions
+ */
+
+/**
+ * @typedef {(typeof ControlIconOptions)[
+ *     | "SEEK_BACKWARD"
+ *     | "PREVIOUS"
+ *     | "PLAY"
+ *     | "PAUSE"
+ *     | "NEXT"
+ *     | "SEEK_FORWARD"]} PanelControlIconOptions
+ */

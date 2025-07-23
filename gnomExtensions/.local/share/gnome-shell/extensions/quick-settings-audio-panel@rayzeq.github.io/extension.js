@@ -41,7 +41,7 @@ export default class QSAP extends Extension {
         this.InputVolumeSlider = this.InputVolumeIndicator._input;
         this.settings = this.getSettings();
         update_settings(this.settings);
-        this._extension_controller = new ExtensionController(this.settings, this.getLogger(), this.InputVolumeIndicator);
+        this._extension_controller = new ExtensionController(this.settings, this.getLogger(), this.InputVolumeIndicator, OutputVolumeSlider);
         this._scscd_callback = this.settings.connect('changed::master-volume-sliders-show-current-device', () => {
             if (this.settings.get_boolean('master-volume-sliders-show-current-device')) {
                 this._patch_show_current_device(OutputVolumeSlider);
@@ -66,7 +66,8 @@ export default class QSAP extends Extension {
         this._sc_callback = this.settings.connect('changed', (_, name) => {
             if (name !== "autohide-profile-switcher" &&
                 name !== "ignore-virtual-capture-streams" &&
-                name !== "always-show-input-volume-slider") {
+                name !== "always-show-input-volume-slider" &&
+                name !== "remove-output-volume-slider") {
                 this._refresh_panel();
             }
         });
@@ -78,7 +79,6 @@ export default class QSAP extends Extension {
         this._unpatch_show_current_device(this.InputVolumeSlider);
         this.settings.disconnect(this._scabaortd_callback);
         this._remove_reset_applications_output();
-        this.settings.disconnect(this._scasis_callback);
         this.settings.disconnect(this._sc_callback);
         cleanup_idle_ids();
         this._cleanup_panel();
@@ -90,7 +90,6 @@ export default class QSAP extends Extension {
         this._cleanup_panel();
         const panel_type = this.settings.get_string("panel-type");
         const merged_panel_position = this.settings.get_string("merged-panel-position");
-        const remove_output_volume_slider = this.settings.get_boolean("remove-output-volume-slider");
         const move_output_volume_slider = this.settings.get_boolean('move-output-volume-slider');
         const move_input_volume_slider = this.settings.get_boolean('move-input-volume-slider');
         const create_mpris_controllers = this.settings.get_boolean("create-mpris-controllers");
@@ -99,7 +98,7 @@ export default class QSAP extends Extension {
         const create_balance_slider = this.settings.get_boolean('create-balance-slider');
         const create_profile_switcher = this.settings.get_boolean('create-profile-switcher');
         const widgets_order = this.settings.get_strv('widgets-order');
-        if (move_output_volume_slider || move_input_volume_slider || create_mpris_controllers || create_applications_volume_sliders || create_perdevice_volume_sliders || remove_output_volume_slider || create_balance_slider || create_profile_switcher) {
+        if (move_output_volume_slider || move_input_volume_slider || create_mpris_controllers || create_applications_volume_sliders || create_perdevice_volume_sliders || create_balance_slider || create_profile_switcher) {
             if (panel_type === "independent-panel")
                 LibPanel.enable();
             this._panel = LibPanel.main_panel;
@@ -169,7 +168,7 @@ export default class QSAP extends Extension {
                     this._create_app_mixer(index, this.settings.get_boolean("group-applications-volume-sliders"), this.settings.get_string("applications-volume-sliders-filter-mode"), this.settings.get_strv("applications-volume-sliders-filters"));
                 }
                 else if (widget === "perdevice-volume-sliders" && create_perdevice_volume_sliders) {
-                    this._create_sink_mixer(index, this.settings.get_string("perdevice-volume-sliders-filter-mode"), this.settings.get_strv("perdevice-volume-sliders-filters"));
+                    this._create_sink_mixer(index, this.settings.get_string("perdevice-volume-sliders-filter-mode"), this.settings.get_strv("perdevice-volume-sliders-filters"), this.settings.get_boolean("perdevice-volume-sliders-change-button"), this.settings.get_boolean("perdevice-volume-sliders-change-menu"));
                 }
                 else if (widget === "balance-slider" && create_balance_slider) {
                     this._create_balance_slider(index);
@@ -178,13 +177,9 @@ export default class QSAP extends Extension {
                     this._create_profile_switcher(index);
                 }
             }
-            if (remove_output_volume_slider) {
-                OutputVolumeSlider.visible = false;
-            }
         }
     }
     _cleanup_panel() {
-        OutputVolumeSlider.visible = true;
         if (!this._panel)
             return;
         if (this._profile_switcher) {
@@ -260,8 +255,8 @@ export default class QSAP extends Extension {
         }
         MessageView_DateMenu._qsap_media_removed = true;
     }
-    _create_app_mixer(index, type, filter_mode, filters) {
-        if (type === "combined") {
+    _create_app_mixer(index, group, filter_mode, filters) {
+        if (group) {
             this._applications_mixer_combined = new ApplicationsMixerToggle(this.settings, filter_mode, filters);
             this._panel.addItem(this._applications_mixer_combined, 2);
             this._panel._grid.set_child_at_index(this._applications_mixer_combined, index);
@@ -270,8 +265,8 @@ export default class QSAP extends Extension {
             this._applications_mixer = new ApplicationsMixer(this._panel, index, filter_mode, filters, this.settings);
         }
     }
-    _create_sink_mixer(index, filter_mode, filters) {
-        this._sink_mixer = new SinkMixer(this._panel, index, filter_mode, filters);
+    _create_sink_mixer(index, filter_mode, filters, change_button, change_menu) {
+        this._sink_mixer = new SinkMixer(this._panel, index, filter_mode, filters, change_button, change_menu);
     }
     _create_balance_slider(index) {
         this._balance_slider = new BalanceSlider(this.settings);
@@ -388,17 +383,21 @@ class ExtensionController {
     logger;
     injection_manager;
     handler_ids;
+    active_patches;
     pactl_path;
+    output_volume_slider;
     input_volume_indicator;
     input_volume_slider;
     input_visibility;
     input_is_recursing;
-    constructor(settings, logger, input_volume_indicator) {
+    constructor(settings, logger, input_volume_indicator, output_volume_slider) {
         this.settings = settings;
         this.logger = logger;
         this.injection_manager = new InjectionManager();
         this.handler_ids = new Map();
+        this.active_patches = new Map();
         this.pactl_path = get_pactl_path(settings)[0] || undefined;
+        this.output_volume_slider = output_volume_slider;
         this.input_volume_indicator = input_volume_indicator;
         this.input_volume_slider = input_volume_indicator._input;
         this.input_visibility = false;
@@ -411,6 +410,9 @@ class ExtensionController {
         });
         this.connect_setting("changed::ignore-virtual-capture-streams", () => {
             this.set_ignore_virtual_capture_streams(this.settings.get_boolean("ignore-virtual-capture-streams"));
+        });
+        this.connect_setting("changed::remove-output-volume-slider", () => {
+            this.set_remove_output_volume_slider(this.settings.get_boolean("remove-output-volume-slider"));
         });
     }
     connect(object, signal, callback) {
@@ -439,7 +441,8 @@ class ExtensionController {
         }
     }
     set_ignore_virtual_capture_streams(enable) {
-        if (enable) {
+        const was_active = !!this.active_patches.get("ignore-virtual-capture-streams");
+        if (enable && !was_active) {
             const self = this;
             this.injection_manager.overrideMethod(this.input_volume_slider.constructor.prototype, "_shouldBeVisible", wrapped => function () {
                 // early return, so we check for virtual stream only if we would show
@@ -473,33 +476,41 @@ class ExtensionController {
                 }
                 return true;
             });
+            this.active_patches.set("ignore-virtual-capture-streams", true);
         }
-        else {
+        else if (!enable && was_active) {
             this.injection_manager.restoreMethod(this.input_volume_slider.constructor.prototype, "_shouldBeVisible");
+            this.active_patches.set("ignore-virtual-capture-streams", false);
         }
         const visibility = this.input_volume_slider._shouldBeVisible();
         this.input_volume_slider.visible = visibility;
         this.input_volume_indicator.visible = visibility;
     }
-    set_always_show_input_volume_slider(enabled) {
-        if (enabled) {
+    set_always_show_input_volume_slider(enable) {
+        const was_active = !!this.active_patches.get("always-show-input-volume-slider");
+        if (enable && !was_active) {
             this.connect(this.input_volume_slider, "notify::visible", () => this.reset_input_volume_visibility());
-            // make sure to check if the indicator should be shown when some events are fired.
+            // make sure to check if the indicator should be shown when the visibility is synced.
             // we need this because we make the slider always visible, so notify::visible isn't
             // fired when gnome-shell tries to show it (because it was already visible)
-            this.connect(this.input_volume_slider._control, "stream-added", () => this.reset_input_volume_visibility());
-            this.connect(this.input_volume_slider._control, "stream-removed", () => this.reset_input_volume_visibility());
-            this.connect(this.input_volume_slider._control, "default-source-changed", () => this.reset_input_volume_visibility());
+            const self = this;
+            this.injection_manager.overrideMethod(this.input_volume_slider.constructor.prototype, "_sync", wrapped => function () {
+                const was_visible = this.visible;
+                wrapped.call(this);
+                if (was_visible && this._shouldBeVisible()) {
+                    self.reset_input_volume_visibility();
+                }
+            });
+            this.active_patches.set("always-show-input-volume-slider", true);
         }
-        else {
+        else if (!enable && was_active) {
             this.disconnect(this.input_volume_slider, "notify::visible");
-            this.disconnect(this.input_volume_slider._control, "stream-added");
-            this.disconnect(this.input_volume_slider._control, "stream-removed");
-            this.disconnect(this.input_volume_slider._control, "default-source-changed");
+            this.injection_manager.restoreMethod(this.input_volume_slider.constructor.prototype, "_sync");
+            this.active_patches.set("always-show-input-volume-slider", false);
+            this.input_volume_slider._maybeShowInput();
+            this.input_volume_slider.visible = this.input_volume_slider._shouldBeVisible();
         }
-        const visibility = this.input_volume_slider._shouldBeVisible();
-        this.input_volume_slider.visible = visibility;
-        this.input_volume_indicator.visible = visibility;
+        this.reset_input_volume_visibility();
     }
     reset_input_volume_visibility() {
         if (this.input_is_recursing) {
@@ -515,6 +526,21 @@ class ExtensionController {
                 this.input_volume_slider.visible = true;
             }
         }
+    }
+    set_remove_output_volume_slider(enable) {
+        const was_active = !!this.active_patches.get("remove-output-volume-slider");
+        if (enable && !was_active) {
+            this.injection_manager.overrideMethod(this.output_volume_slider.constructor.prototype, "_sync", wrapped => function () {
+                wrapped.call(this);
+                this.visible = false;
+            });
+            this.active_patches.set("remove-output-volume-slider", true);
+        }
+        else if (!enable && was_active) {
+            this.injection_manager.restoreMethod(this.output_volume_slider.constructor.prototype, "_sync");
+            this.active_patches.set("remove-output-volume-slider", false);
+        }
+        this.output_volume_slider._sync();
     }
     destroy() {
         this.set_ignore_virtual_capture_streams(false);

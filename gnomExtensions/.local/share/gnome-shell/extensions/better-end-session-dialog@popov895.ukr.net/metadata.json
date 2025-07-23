@@ -7,9 +7,7 @@
   "name": "Better End Session Dialog",
   "settings-schema": "org.gnome.shell.extensions.better-end-session-dialog",
   "shell-version": [
-    "45",
-    "46",
-    "47"
+    "48"
   ],
   "url": "https://github.com/popov895/better-end-session-dialog",
   "uuid": "better-end-session-dialog@popov895.ukr.net",
