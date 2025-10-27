@@ -10,6 +10,7 @@ import {supportedIcons} from '../lib/widgets/indicatorVectorImages.js';
 import * as Helper from '../lib/upower/upowerHelper.js';
 
 const  ConfigureWindow = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_UPowerConfigureWindow',
 }, class ConfigureWindow extends Adw.Window {
     _init(settings, deviceItem, pathInfo, parentWindow) {
         super._init({
@@ -96,6 +97,34 @@ const  ConfigureWindow = GObject.registerClass({
         iconGroup.add(iconRow);
         page.add(iconGroup);
 
+        const aliasGroup = new Adw.PreferencesGroup({
+            title: _('Alias'),
+        });
+
+        const aliasRow = new Adw.EntryRow({
+            title: _('Device Alias'),
+            text: pathInfo.alias || '',
+            show_apply_button: true,
+            activates_default: false,
+        });
+
+        aliasRow.connect('apply', row => {
+            const newAlias = row.text.trim();
+            const onlineDevice = settings.get_strv('upower-device-list');
+            const existingPathIndex =
+        onlineDevice.findIndex(item => JSON.parse(item).path === pathInfo.path);
+
+            if (existingPathIndex !== -1) {
+                const existingItem = JSON.parse(onlineDevice[existingPathIndex]);
+                existingItem['alias'] = newAlias;
+                onlineDevice[existingPathIndex] = JSON.stringify(existingItem);
+                settings.set_strv('upower-device-list', onlineDevice);
+            }
+        });
+
+        aliasGroup.add(aliasRow);
+        page.add(aliasGroup);
+
         const indicatorGroup = new Adw.PreferencesGroup({
             title: _('Indicator'),
         });
@@ -113,7 +142,8 @@ const  ConfigureWindow = GObject.registerClass({
         const dropDown = new Gtk.DropDown({
             valign: Gtk.Align.CENTER,
             model: Gtk.StringList.new(indicatorOptions.map(option => option.label)),
-            selected: indicatorOptions.findIndex(option => option.id === pathInfo.indicatorMode),
+            selected: indicatorOptions.findIndex(option =>
+                option.id === pathInfo.hideDevice ? 0 : 1),
         });
 
         dropDown.connect('notify::selected', () => {
@@ -126,7 +156,7 @@ const  ConfigureWindow = GObject.registerClass({
 
             if (existingPathIndex !== -1) {
                 const existingItem = JSON.parse(onlineDevice[existingPathIndex]);
-                existingItem['indicator-mode'] = selectedId;
+                existingItem['hide-device'] = selectedId === 0;
                 onlineDevice[existingPathIndex] = JSON.stringify(existingItem);
                 settings.set_strv('upower-device-list', onlineDevice);
             }
@@ -141,6 +171,7 @@ const  ConfigureWindow = GObject.registerClass({
 );
 
 const  DeviceItem = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_UPowerDeviceItem',
 }, class DeviceItem extends Adw.ActionRow {
     constructor(settings, deviceItem, pathInfo, presentDevices) {
         super({});
@@ -198,8 +229,8 @@ const  DeviceItem = GObject.registerClass({
     updateProperites(pathInfo, presentDevices) {
         this._pathInfo = pathInfo;
         const devicePresent = presentDevices.includes(pathInfo.path);
-        const removedLabel = _('(Removed)');
-        const onlineLabel = _('(Added)');
+        const removedLabel = _('(Offline)');
+        const onlineLabel = _('(Online)');
         this.title = pathInfo.model;
         this.subtitle =
             devicePresent ? `${pathInfo.path} ${onlineLabel}`
@@ -211,7 +242,7 @@ const  DeviceItem = GObject.registerClass({
 
 
 export const  UpowerDevices = GObject.registerClass({
-    GTypeName: 'BBM_UpowerDevice',
+    GTypeName: 'BluetoothBatteryMeter_UpowerDeviceUI',
     Template: GLib.Uri.resolve_relative(
         import.meta.url, '../ui/upowerDevices.ui', GLib.UriFlags.NONE
     ),
@@ -292,7 +323,8 @@ export const  UpowerDevices = GObject.registerClass({
                 path: info['path'],
                 icon: info['icon'],
                 model: info['model'],
-                indicatorMode: info['indicator-mode'],
+                alias: info['alias'],
+                hideDevice: info['hide-device'],
             };
             if (this._deviceItems.has(pathInfo.path)) {
                 const row = this._deviceItems.get(pathInfo.path);

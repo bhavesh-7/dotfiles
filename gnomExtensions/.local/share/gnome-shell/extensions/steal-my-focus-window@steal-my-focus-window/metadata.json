@@ -6,9 +6,10 @@
     "45",
     "46",
     "47",
-    "48"
+    "48",
+    "49"
   ],
   "url": "https://github.com/v-dimitrov/gnome-shell-extension-stealmyfocus",
   "uuid": "steal-my-focus-window@steal-my-focus-window",
-  "version": 5
+  "version": 6
 }

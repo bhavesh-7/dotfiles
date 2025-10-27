@@ -8,8 +8,9 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 
 import {PopupMenuWidget} from './popupMenuWidget.js';
 
-export const OnHoverMenu = GObject.registerClass(
-class OnHoverMenu extends GObject.Object {
+export const OnHoverMenu = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_OnHoverMenu',
+}, class OnHoverMenu extends GObject.Object {
     _init(box, settings, gIcon, path, alias, widgetInfo, dataHandler) {
         super._init();
         this._box = box;
@@ -19,7 +20,7 @@ class OnHoverMenu extends GObject.Object {
         this._menuManager.addMenu(this._menu);
         this._menu.actor.hide();
         this._popupItem =  new PopupMenuWidget(
-            this, gIcon, path, alias, widgetInfo, false, dataHandler);
+            settings, gIcon, path, alias, widgetInfo, dataHandler);
         this._menu.addMenuItem(this._popupItem);
         this._delayValue = settings.get_int('on-hover-delay');
         settings.connectObject(

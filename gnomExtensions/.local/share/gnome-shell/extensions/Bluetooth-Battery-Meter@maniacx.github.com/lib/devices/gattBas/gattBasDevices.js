@@ -6,9 +6,18 @@ import {createConfig, createProperties, DataHandler} from '../../dataHandler.js'
 import {supportedCommonIcons} from './gattBasConfig.js';
 import {GattBasDbus} from './gattBasDbus.js';
 
-export const GattBasUUID = '0000180f-0000-1000-8000-00805f9b34fb';
+const GattBasUUID = '0000180f-0000-1000-8000-00805f9b34fb';
+
+export function isGattBas(bluezDeviceProxy) {
+    const bluezProps = [];
+    const UUIDs = bluezDeviceProxy.UUIDs || [];
+    const supported = UUIDs.includes(GattBasUUID) ? 'yes' : 'no';
+    return {supported, bluezProps};
+}
+
 
 export const GattBasDevices = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_GattBasDevices',
 }, class GattBasDevices extends GObject.Object {
     _init(settings, devicePath, icon, updateDeviceMapCb) {
         super._init();
@@ -85,7 +94,7 @@ export const GattBasDevices = GObject.registerClass({
             this
         );
 
-        this.dataHandler = new DataHandler(this._config, this._props, null, null);
+        this.dataHandler = new DataHandler(this._config, this._props);
 
         this.updateDeviceMapCb(this._devicePath, this.dataHandler);
     }
@@ -113,16 +122,6 @@ export const GattBasDevices = GObject.registerClass({
         this._config.battery2Icon = existingItem['icon-batt2'];
         this._config.battery3Icon = existingItem['icon-batt3'];
         this.dataHandler?.setConfig(this._config);
-    }
-
-
-    _updateBatteryInfo() {
-        if (!this._deviceProxy)
-            return;
-        const rawBattInfo = this._deviceProxy.get_cached_property('BatteryInfo').unpack();
-        const battInfo = rawBattInfo && JSON.parse(rawBattInfo);
-        this._props = {...this._props, ...battInfo};
-        this.dataHandler?.setProps(this._props);
     }
 
     _validAlbumArtIcons(icon) {
@@ -153,12 +152,29 @@ export const GattBasDevices = GObject.registerClass({
 
     updateBatteryProps(props) {
         this._props = {...this._props, ...props};
+
+        const b1 = props.battery1Level;
+        const b2 = props.battery2Level;
+
+        let computed;
+
+        if ((b1 === undefined || b1 === 0) && (b2 === undefined || b2 === 0))
+            computed = undefined;
+        else if (b1 === undefined || b1 === 0)
+            computed = b2;
+        else if (b2 === undefined || b2 === 0)
+            computed = b1;
+        else
+            computed = Math.min(b1, b2);
+
+
+        this._props.computedBatteryLevel = computed;
+
         if (!this._battInfoRecieved)
             this._startConfiguration(props);
 
         this.dataHandler?.setProps(this._props);
     }
-
 
 
     destroy() {

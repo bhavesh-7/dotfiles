@@ -35,6 +35,10 @@ return {
           ["<C-e>"] = cmp.mapping.abort(),
           ["<CR>"] = cmp.mapping.confirm({ select = true }),
         }),
+        completion = {
+          completeopt = "menu,menuone,noselect",
+          keyword_pattern = [[\k\+]], -- ensures tag names and attributes trigger completion
+        },
         sources = cmp.config.sources({
           { name = "nvim_lsp" },
           { name = "luasnip" }, -- For luasnip users.

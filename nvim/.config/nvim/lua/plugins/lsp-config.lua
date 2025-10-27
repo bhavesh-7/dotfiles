@@ -20,15 +20,30 @@ return {
     "neovim/nvim-lspconfig",
     config = function()
       local capabilities = require("cmp_nvim_lsp").default_capabilities()
-      local lspconfig = require("lspconfig")
+      local lspconfig = require("lspconfig") or vim.lsp.config
       lspconfig.lua_ls.setup({
         capabilities = capabilities,
       })
       lspconfig.emmet_ls.setup({
         capabilities = capabilities,
+        filetypes = { "html", "css", "javascriptreact", "typescriptreact" },
       })
       lspconfig.html.setup({
         capabilities = capabilities,
+        init_options = {
+          provideFormatter = true,
+        },
+        settings = {
+          html = {
+            format = {
+              wrapLineLength = 120,
+              unformatted = "code,pre,em,strong,span",
+            },
+          },
+        },
+        on_attach = function(client, bufnr)
+          client.server_capabilities.completionProvider.triggerCharacters = { "<", " ", ":", '"', "'", "=" }
+        end,
       })
       lspconfig.ts_ls.setup({
         capabilities = capabilities,
@@ -43,10 +58,10 @@ return {
         capabilities = capabilities,
       })
       lspconfig.bashls.setup({
-        capabilities=capabilities,
+        capabilities = capabilities,
       })
       lspconfig.lemminx.setup({
-        capabilities=capabilities,
+        capabilities = capabilities,
       })
       vim.keymap.set("n", "K", vim.lsp.buf.hover, {})
       vim.keymap.set("n", "K", vim.lsp.buf.hover, {})

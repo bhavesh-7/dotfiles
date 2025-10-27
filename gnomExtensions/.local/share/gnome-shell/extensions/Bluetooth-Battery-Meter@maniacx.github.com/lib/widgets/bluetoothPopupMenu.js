@@ -6,24 +6,43 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 export const BluetoothPopupMenuItem = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_BluetoothPopupMenuItem',
 }, class BluetoothPopupMenuItem extends PopupMenu.PopupBaseMenuItem {
-    _init(manager, device, qsLevelEnabled, deviceIcon) {
+    _init(manager) {
         super._init({
             style_class: 'bt-device-item',
         });
         this._manager = manager;
-        this._toggle = manager._toggle;
-        this._settings = this._toggle._settings;
+        this._toggle = manager.toggle;
+        this._settings = manager.settings;
         this._client = this._toggle._bluetoothToggle._client;
-        this._gIcon = this._toggle.gIcon;
+        this._gIcon = manager.gIcon;
         this._showBatteryPercentage = this._toggle.showBatteryPercentage;
         this._showBatteryIcon = this._toggle.showBatteryIcon;
         this._swapIconText = this._toggle.swapIconText;
         this._connectedColor = this._toggle.connectedColor;
         this._disconnectedColor = null;
-        this._device = device;
-        this._iconType = deviceIcon;
-        this._qsLevelEnabled = qsLevelEnabled;
+        this._device = manager.device;
+        this._iconType = manager.deviceIcon;
+        this._qsLevelEnabled = manager.qsLevelEnabled;
+        const themeNode = this.peek_theme_node();
+        if (themeNode === null) {
+            this._backgroundStyleChangeId = this.connect('style-changed', () => {
+                const isStaged = this.get_stage();
+                if (isStaged) {
+                    if (this._backgroundStyleChangeId)
+                        this.disconnect(this._backgroundStyleChangeId);
+                    this._backgroundStyleChangeId = null;
+                    this._buildUI(this.peek_theme_node());
+                }
+            });
+        } else {
+            this._buildUI(themeNode);
+        }
+    }
+
+    _buildUI(themeNode) {
+        this._disconnectedColor = themeNode.get_foreground_color();
         this._icon = new St.Icon({
             style_class: 'popup-menu-icon',
         });
@@ -44,7 +63,7 @@ export const BluetoothPopupMenuItem = GObject.registerClass({
         }
 
         this._pairIcon = new St.Icon({
-            style_class: 'popup-menu-icon',
+            style_class: 'popup-menu-icon bbm-bt-pair-widget',
         });
         this.add_child(this._pairIcon);
 
@@ -79,28 +98,28 @@ export const BluetoothPopupMenuItem = GObject.registerClass({
             if (this._iconChangeTimerId)
                 GLib.source_remove(this._iconChangeTimerId);
             this._iconChangeTimerId = null;
-            if (this._idleIconTimerId)
-                GLib.source_remove(this._idleIconTimerId);
-            this._idleIconTimerId = null;
-            if (this._idleTimerId)
-                GLib.source_remove(this._idleTimerId);
-            this._idleTimerId = null;
+            if (this._backgroundStyleChangeId)
+                this.disconnect(this._backgroundStyleChangeId);
+            this._backgroundStyleChangeId = null;
+            if (this._labelStyleChangeId && this._batteryPercentageLabel)
+                this._batteryPercentageLabel.disconnect(this._labelStyleChangeId);
+            this._labelStyleChangeId = null;
         }, this);
     }
 
     updateProperties(qsLevelEnabled, deviceIcon) {
         this._qsLevelEnabled = qsLevelEnabled;
-        if (this._showBatteryIcon) {
+        if (this._showBatteryIcon && this._batteryIcon) {
             this._batteryIcon.visible =
                 this._qsLevelEnabled && this._manager.batteryPercentage > 0;
         }
-        if (this._showBatteryPercentage) {
+        if (this._showBatteryPercentage && this._batteryPercentageLabel) {
             this._batteryPercentageLabel.visible =
                 this._qsLevelEnabled && this._manager.batteryPercentage > 0;
         }
         if (this._iconType !== deviceIcon) {
             this._iconType = deviceIcon;
-            this._icon.set_gicon(this._gIcon(`bbm-${this._iconType}-symbolic.svg`));
+            this._icon?.set_gicon(this._gIcon(`bbm-${this._iconType}-symbolic.svg`));
         }
     }
 
@@ -108,25 +127,32 @@ export const BluetoothPopupMenuItem = GObject.registerClass({
         if (this._showBatteryPercentage) {
             this._batteryPercentageLabel = new St.Label({text: '100%'});
             this.add_child(this._batteryPercentageLabel);
-            if (this._idleTimerId)
-                GLib.source_remove(this._idleTimerId);
-            this._idleTimerId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
-                if (!this._batteryPercentageLabel.get_parent())
-                    return GLib.SOURCE_CONTINUE;
-                if (this._swapIconText) {
-                    this._batteryPercentageLabel
-                        .set_width(this._batteryPercentageLabel.get_width());
-                    this._batteryPercentageLabel.style_class = 'bbm-bt-percentage-label';
-                }
-                this._batteryPercentageLabel.text = '';
+            if (this._batteryPercentageLabel.get_stage()) {
                 this._bindLabel();
-                this._idleTimerId = null;
-                return GLib.SOURCE_REMOVE;
-            });
+            } else {
+                this._labelStyleChangeId = this._batteryPercentageLabel.connect(
+                    'style-changed', () => {
+                        const isStaged = this.get_stage();
+                        if (isStaged) {
+                            if (this._labelStyleChangeId)
+                                this._batteryPercentageLabel.disconnect(this._labelStyleChangeId);
+                            this._labelStyleChangeId = null;
+                            this._bindLabel();
+                        }
+                    }
+                );
+            }
         }
     }
 
     _bindLabel() {
+        if (this._swapIconText) {
+            this._batteryPercentageLabel
+                        .set_width(this._batteryPercentageLabel.get_width());
+            this._batteryPercentageLabel.style_class = 'bbm-bt-percentage-label';
+        }
+        this._batteryPercentageLabel.text = '';
+
         this._manager.bind_property_full('batteryPercentage',
             this._batteryPercentageLabel, 'visible',
             GObject.BindingFlags.SYNC_CREATE,
@@ -159,20 +185,6 @@ export const BluetoothPopupMenuItem = GObject.registerClass({
         }
     }
 
-    _waitForStage() {
-        if (this._idleIconTimerId)
-            GLib.source_remove(this._idleIconTimerId);
-        this._idleIconTimerId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
-            if (!this._pairIcon.get_parent())
-                return GLib.SOURCE_CONTINUE;
-            this._disconnectedColor = this.get_theme_node().get_foreground_color()
-                        .to_string().substring(0, 7);
-            this._pairIcon?.set_style(`color: ${this._disconnectedColor};`);
-            this._idleIconTimerId = null;
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
     async _toggleConnected() {
         this._assignPairingIcon(true);
         await this._client.toggleDevice(this._device);
@@ -186,10 +198,8 @@ export const BluetoothPopupMenuItem = GObject.registerClass({
             this._counter = 4;
             if (!this._device.connected)
                 this._pairIcon?.set_style(`color: ${this._connectedColor};`);
-            else if (this._disconnectedColor)
-                this._pairIcon?.set_style(`color: ${this._disconnectedColor};`);
             else
-                this._waitForStage();
+                this._pairIcon?.set_style(`color: ${this._disconnectedColor};`);
 
             const connected = this._device.connected;
             this._iconChangeTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {

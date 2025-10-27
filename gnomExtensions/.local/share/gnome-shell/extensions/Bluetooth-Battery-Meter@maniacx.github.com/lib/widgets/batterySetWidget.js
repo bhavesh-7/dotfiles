@@ -12,10 +12,11 @@ const shellVersion48Above = Number.parseInt(major) >= 48;
 const boxLayoutProps = shellVersion48Above
     ? {orientation: Clutter.Orientation.VERTICAL} : {vertical: true};
 
-export const BatterySetWidget = GObject.registerClass(
-class BatterySetWidget extends St.BoxLayout {
-    _init(batteryIconSize, widgetInfo, dataHandler, params = {}) {
-        super._init({...params});
+export const BatterySetWidget = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_BatterySetWidget',
+}, class BatterySetWidget extends St.BoxLayout {
+    _init(batteryIconSize, widgetInfo, dataHandler) {
+        super._init();
         this._dataHandler = dataHandler;
         this._config = this._dataHandler.getConfig();
         const orientation = {x_align: Clutter.ActorAlign.START, ...boxLayoutProps};

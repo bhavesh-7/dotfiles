@@ -1,4 +1,5 @@
 'use strict';
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -8,21 +9,25 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {ngettext} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {EnhancedDeviceSupportManager} from './enhancedDeviceSupportManager.js';
-import {DeviceWidgetManager} from './deviceWidgetManager.js';
-import {PanelButton} from './panelButton.js';
-import {UpowerClient} from './upower/upowerIndicator.js';
+import {WidgetManagerBluez} from './widgetManagerBluez.js';
+import {WidgetManagerEnhanced} from './widgetManagerEnhanced.js';
+import {PanelButtonSingleDevice} from './panelButtonSingleDevice.js';
+import {PanelButtonMultiDevice} from './panelButtonMultiDevice.js';
+import {UpowerClient} from './upower/upowerDevice.js';
 import {supportedIcons} from './widgets/indicatorVectorImages.js';
+import {isDarkMode, adjustColorLuminanceToRgba} from './widgets/colorHelpers.js';
 
 const QuickSettingsMenu = Main.panel.statusArea.quickSettings;
 const [major] = Config.PACKAGE_VERSION.split('.');
 const shellVersion = Number.parseInt(major);
 
 export const BluetoothBatteryMeter = GObject.registerClass({
+    GTypeName: 'BluetoothBatteryMeter_BluetoothToggle',
 }, class BluetoothBatteryMeter extends GObject.Object {
     _init(settings, extensionPath, extuuid) {
         super._init();
-        this._settings = settings;
-        this._extensionPath = extensionPath;
+        this.settings = settings;
+        this.extPath = extensionPath;
         this._extuuid = extuuid;
 
         this._idleTimerId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
@@ -45,40 +50,37 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         this._deviceItems = new Map();
         this.deviceList = new Map();
         this._colorsAssigned = false;
-        this._enhancedDeviceConfigChanged = false;
         this.connectedColor = '#8fbbf0';
-        this.disconnectedColor = '#ffffff';
+        this._indicatorBox = null;
         this._pullDevicesFromGsetting();
         this.gIcon = iconName => Gio.icon_new_for_string(
-            `${this._extensionPath}/icons/hicolor/scalable/actions/${iconName}`);
-        this.showBatteryPercentage = this._settings.get_boolean('enable-battery-level-text');
-        this.showBatteryIcon = this._settings.get_boolean('enable-battery-level-icon');
-        this.swapIconText = this._settings.get_boolean('swap-icon-text');
-        this._sortDevicesByHistory = this._settings.get_boolean('sort-devices-by-history');
-        this._bluetoothIndicatorEnabled = this._settings.get_boolean('enable-battery-indicator');
-        this._hideBluetoothIndicator = this._settings.get_int('hide-bluetooth-indicator');
-        this._enableEnhancedDeviceMode = this._settings.get_boolean('enable-enhanced-device-mode');
-        this._enablePanelButton = this._settings.get_boolean('enable-panel-button-mode');
-        this.airpodsEnabled = this._settings.get_boolean('enable-airpods-device');
-        this.gattBasEnabled = this._settings.get_boolean('enable-gattbas-device');
-        this._isUnlockSession = Main.sessionMode.currentMode === 'unlock-dialog';
+            `${this.extPath}/icons/hicolor/scalable/actions/${iconName}`);
+        this.usePopupInQuickSettings = this.settings.get_boolean('popup-in-quick-settings');
+        this.showBatteryPercentage = this.settings.get_boolean('enable-battery-level-text');
+        this.showBatteryIcon = this.settings.get_boolean('enable-battery-level-icon');
+        this.swapIconText = this.settings.get_boolean('swap-icon-text');
+        this._sortDevicesByHistory = this.settings.get_boolean('sort-devices-by-history');
+        this._hideBluetoothIndicator = this.settings.get_int('hide-bluetooth-indicator');
+        this._indicatorType = this.settings.get_int('indicator-type');
+        this._panelSingleIndicator = this.settings.get_boolean('panel-button-single-indicator');
+        this._enableMultimodeIndicator = this.settings.get_boolean('enable-multi-indicator-mode');
+        this._enableHoverMode = this.settings.get_boolean('enable-on-hover-mode');
 
-        this._widgetInfo = {
-            circleWidgetColor: this._settings.get_int('circle-widget-color'),
-            levelIndicatorType: this._settings.get_int('level-indicator-type'),
-            levelIndicatorColor: this._settings.get_int('level-indicator-color'),
-            color100: this._settings.get_string('color-100'),
-            color90: this._settings.get_string('color-90'),
-            color80: this._settings.get_string('color-80'),
-            color70: this._settings.get_string('color-70'),
-            color60: this._settings.get_string('color-60'),
-            color50: this._settings.get_string('color-50'),
-            color40: this._settings.get_string('color-40'),
-            color30: this._settings.get_string('color-30'),
-            color20: this._settings.get_string('color-20'),
-            color10: this._settings.get_string('color-10'),
+        this.isUnlockSession = Main.sessionMode.currentMode === 'unlock-dialog';
+        this.widgetInfo = {
+            extPath: this.extPath,
+            disableLevelInIcon: this.settings.get_boolean('disable-level-in-icon'),
+            indicatorWithText: this.settings.get_boolean('enable-battery-indicator-text'),
+            levelIndicatorType: this.settings.get_int('level-indicator-type'),
+            levelBarPosition: this.settings.get_int('level-bar-position'),
+            levelIndicatorColor: this.settings.get_int('level-indicator-color'),
+            levelIndicatorCustomColors: this.settings.get_strv('level-indicator-custom-colors'),
+            circleWidgetColor: this.settings.get_int('circle-widget-color'),
+            circleWidgetCustomColors: this.settings.get_strv('circle-widget-custom-colors'),
         };
 
+        this.airpodsEnabled = this.settings.get_boolean('enable-airpods-device');
+        this.gattBasEnabled = this.settings.get_boolean('enable-gattbas-device');
 
         this._originalSync = this._bluetoothToggle._sync;
         this._bluetoothToggle._sync = () => {};
@@ -101,151 +103,141 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         this._originalBluetoothIndicatorSync = QuickSettingsMenu._bluetooth._sync;
         QuickSettingsMenu._bluetooth._sync = () => {};
 
+        this._bluetoothToggle._deviceItems.forEach(item => {
+            item.destroy();
+        });
+        this._bluetoothToggle._deviceItems.clear();
+
         this._themeContext = St.ThemeContext.get_for_stage(global.stage);
         this._themeContext.connectObject('changed', () => {
             this._colorsAssigned = false;
             this._onActiveChanged();
         }, this);
 
-        this._settings.connectObject(
-            'changed::enable-battery-indicator', () => {
-                this._bluetoothIndicatorEnabled =
-                    this._settings.get_boolean('enable-battery-indicator');
+        this.settings.connectObject(
+            'changed::popup-in-quick-settings', () => {
+                this.usePopupInQuickSettings =
+                    this.settings.get_boolean('popup-in-quick-settings');
                 this._onActiveChanged();
             },
             'changed::enable-battery-level-text', () => {
                 this.showBatteryPercentage =
-                    this._settings.get_boolean('enable-battery-level-text');
+                    this.settings.get_boolean('enable-battery-level-text');
                 this._onActiveChanged();
             },
             'changed::enable-battery-level-icon', () => {
-                this.showBatteryIcon = this._settings.get_boolean('enable-battery-level-icon');
+                this.showBatteryIcon = this.settings.get_boolean('enable-battery-level-icon');
                 this._onActiveChanged();
             },
             'changed::swap-icon-text', () => {
-                this.swapIconText = this._settings.get_boolean('swap-icon-text');
+                this.swapIconText = this.settings.get_boolean('swap-icon-text');
                 this._onActiveChanged();
             },
             'changed::sort-devices-by-history', () => {
-                this._sortDevicesByHistory = this._settings.get_boolean('sort-devices-by-history');
+                this._sortDevicesByHistory = this.settings.get_boolean('sort-devices-by-history');
                 this._onActiveChanged();
             },
             'changed::hide-bluetooth-indicator', () => {
-                this._hideBluetoothIndicator = this._settings.get_int('hide-bluetooth-indicator');
+                this._hideBluetoothIndicator = this.settings.get_int('hide-bluetooth-indicator');
                 this._onActiveChanged();
             },
-            'changed::enable-enhanced-device-mode', () => {
-                this._enableEnhancedDeviceMode =
-                    this._settings.get_boolean('enable-enhanced-device-mode');
-                this._setEnhancedDeviceMode();
+            'changed::indicator-type', () => {
+                this._indicatorType = this.settings.get_int('indicator-type');
+                this._onActiveChanged();
+                this._reloadUpowerIndicator();
+            },
+            'changed::panel-button-single-indicator', () => {
+                this._panelSingleIndicator =
+                    this.settings.get_boolean('panel-button-single-indicator');
+                this._onActiveChanged();
+                this._reloadUpowerIndicator();
+            },
+            'changed::enable-multi-indicator-mode', () => {
+                this._enableMultimodeIndicator =
+                    this.settings.get_boolean('enable-multi-indicator-mode');
                 this._onActiveChanged();
             },
-            'changed::enable-panel-button-mode', () => {
-                this._enablePanelButton = this._settings.get_boolean('enable-panel-button-mode');
-                this._setPanelButtonMode();
+            'changed::enable-on-hover-mode', () => {
+                this._enableHoverMode = this.settings.get_boolean('enable-on-hover-mode');
                 this._onActiveChanged();
+                this._reloadUpowerIndicator();
             },
-            'changed::enable-airpods-device', () => {
-                this.airpodsEnabled = this._settings.get_boolean('enable-airpods-device');
-                this._enhancedDeviceConfigChanged = true;
+            'changed::disable-level-in-icon', () => {
+                this.widgetInfo.disableLevelInIcon =
+                    this.settings.get_boolean('disable-level-in-icon');
                 this._onActiveChanged();
+                this._reloadUpowerIndicator();
             },
-            'changed::enable-gattbas-device', () => {
-                this.gattBasEnabled = this._settings.get_boolean('enable-gattbas-device');
-                this._enhancedDeviceConfigChanged = true;
+            'changed::enable-battery-indicator-text', () => {
+                this.widgetInfo.indicatorWithText =
+                    this.settings.get_boolean('enable-battery-indicator-text');
                 this._onActiveChanged();
-            },
-            'changed::circle-widget-color', () => {
-                this._widgetInfo.circleWidgetColor = this._settings.get_int('circle-widget-color');
-                this._onActiveChanged();
+                this._reloadUpowerIndicator();
             },
             'changed::level-indicator-type', () => {
-                this._widgetInfo.levelIndicatorType =
-                    this._settings.get_int('level-indicator-type');
+                this.widgetInfo.levelIndicatorType =
+                    this.settings.get_int('level-indicator-type');
+                this._onActiveChanged();
+                this._reloadUpowerIndicator();
+            },
+            'changed::level-bar-position', () => {
+                this.widgetInfo.levelBarPosition =
+                    this.settings.get_int('level-bar-position');
                 this._onActiveChanged();
                 this._reloadUpowerIndicator();
             },
             'changed::level-indicator-color', () => {
-                this._widgetInfo.levelIndicatorColor =
-                    this._settings.get_int('level-indicator-color');
+                this.widgetInfo.levelIndicatorColor =
+                    this.settings.get_int('level-indicator-color');
                 this._onActiveChanged();
                 this._reloadUpowerIndicator();
             },
-            'changed::color-100', () => {
-                this._widgetInfo.color100 = this._settings.get_string('color-100');
+            'changed::level-indicator-custom-colors', () => {
+                this.widgetInfo.levelIndicatorCustomColors =
+                    this.settings.get_strv('level-indicator-custom-colors');
                 this._onActiveChanged();
                 this._reloadUpowerIndicator();
             },
-            'changed::color-90', () => {
-                this._widgetInfo.color90 = this._settings.get_string('color-90');
+            'changed::circle-widget-color', () => {
+                this.widgetInfo.circleWidgetColor = this.settings.get_int('circle-widget-color');
                 this._onActiveChanged();
                 this._reloadUpowerIndicator();
             },
-            'changed::color-80', () => {
-                this._widgetInfo.color80 = this._settings.get_string('color-80');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-70', () => {
-                this._widgetInfo.color70 = this._settings.get_string('color-70');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-60', () => {
-                this._widgetInfo.color60 = this._settings.get_string('color-60');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-50', () => {
-                this._widgetInfo.color50 = this._settings.get_string('color-50');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-40', () => {
-                this._widgetInfo.color40 = this._settings.get_string('color-40');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-30', () => {
-                this._widgetInfo.color30 = this._settings.get_string('color-30');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-20', () => {
-                this._widgetInfo.color20 = this._settings.get_string('color-20');
-                this._onActiveChanged();
-                this._reloadUpowerIndicator();
-            },
-            'changed::color-10', () => {
-                this._widgetInfo.color10 = this._settings.get_string('color-10');
+            'changed::circle-widget-custom-colors', () => {
+                this.widgetInfo.circleWidgetCustomColors =
+                    this.settings.get_strv('circle-widget-custom-colors');
                 this._onActiveChanged();
                 this._reloadUpowerIndicator();
             },
             'changed::enable-upower-level-icon', () => {
-                this._upowerEnabled = this._settings.get_boolean('enable-upower-level-icon');
+                this._upowerEnabled = this.settings.get_boolean('enable-upower-level-icon');
                 this._reloadUpowerIndicator();
+            },
+            'changed::enable-airpods-device', () => {
+                this.airpodsEnabled = this.settings.get_boolean('enable-airpods-device');
+                this._setEnhancedDeviceMode();
+                this._onActiveChanged();
+            },
+            'changed::enable-gattbas-device', () => {
+                this.gattBasEnabled = this.settings.get_boolean('enable-gattbas-device');
+                this._setEnhancedDeviceMode();
+                this._onActiveChanged();
             },
             this
         );
-        this._bluetoothToggle._deviceItems.forEach(item => {
-            item.destroy();
-        });
-        this._bluetoothToggle._deviceItems.clear();
         this._setEnhancedDeviceMode();
-        this._setPanelButtonMode();
         this._connectSettingsSignal(true);
         this._onActiveChanged();
 
         Main.sessionMode.connectObject(
             'updated', session => {
-                this._isUnlockSession = session.currentMode === 'unlock-dialog';
-                this._setPanelButtonMode();
+                this.isUnlockSession = session.currentMode === 'unlock-dialog';
                 this._onActiveChanged();
             },
             this
         );
 
-        this._upowerEnabled = this._settings.get_boolean('enable-upower-level-icon');
+        this._upowerEnabled = this.settings.get_boolean('enable-upower-level-icon');
         this._reloadUpowerIndicator();
 
         this.sync();
@@ -254,8 +246,7 @@ export const BluetoothBatteryMeter = GObject.registerClass({
     _reloadUpowerIndicator() {
         if (this._upowerEnabled) {
             this._upowerClient?.destroy();
-            this._upowerClient = new UpowerClient(this._settings, this._widgetInfo,
-                this.addIndicatorWidget.bind(this));
+            this._upowerClient = new UpowerClient(this);
         } else {
             this._upowerClient?.destroy();
             this._upowerClient = null;
@@ -264,12 +255,12 @@ export const BluetoothBatteryMeter = GObject.registerClass({
 
     _connectSettingsSignal(connect) {
         if (connect) {
-            this._settingSignalId = this._settings.connect('changed::device-list', () => {
+            this._settingSignalId = this.settings.connect('changed::device-list', () => {
                 this._pullDevicesFromGsetting();
                 this.sync();
             });
         } else if (this._settingSignalId) {
-            this._settings.disconnect(this._settingSignalId);
+            this.settings.disconnect(this._settingSignalId);
             this._settingSignalId = null;
         }
     }
@@ -310,6 +301,7 @@ export const BluetoothBatteryMeter = GObject.registerClass({
             this._bluetoothToggle._updatePlaceholder();
             this._deviceItems.forEach(item => item.destroy());
             this._deviceItems.clear();
+            this._updateIndicatorSettings();
             this.sync();
         }
     }
@@ -342,7 +334,7 @@ export const BluetoothBatteryMeter = GObject.registerClass({
 
     _pullDevicesFromGsetting() {
         this.deviceList.clear();
-        const deviceList = this._settings.get_strv('device-list');
+        const deviceList = this.settings.get_strv('device-list');
         if (deviceList.length !== 0) {
             for (const jsonString of deviceList) {
                 const item = JSON.parse(jsonString);
@@ -381,7 +373,7 @@ export const BluetoothBatteryMeter = GObject.registerClass({
             deviceList.push(JSON.stringify(item));
         }
         this._connectSettingsSignal(false);
-        this._settings.set_strv('device-list', deviceList);
+        this.settings.set_strv('device-list', deviceList);
         this._connectSettingsSignal(true);
         this.sync();
     }
@@ -440,9 +432,8 @@ export const BluetoothBatteryMeter = GObject.registerClass({
             if (this._deviceItems.has(path)) {
                 const deviceWidgetManager = this._deviceItems.get(path);
                 if (this.enhancedDeviceManager) {
-                    const enhancedProps =
-                        this.enhancedDeviceManager?.onDeviceSync(path, dev.connected, dev.icon,
-                            this._enhancedDeviceConfigChanged);
+                    const enhancedProps = this.enhancedDeviceManager?.onDeviceSync(path,
+                        dev.connected, dev.icon, dev.alias);
 
                     if (deviceWidgetManager.type && enhancedProps?.dataHandler)
                         deviceWidgetManager.setDataHandler(enhancedProps.dataHandler);
@@ -451,10 +442,14 @@ export const BluetoothBatteryMeter = GObject.registerClass({
                 continue;
             }
 
-            const enhancedDeviceProps =
-                this.enhancedDeviceManager?.onDeviceSync(path, dev.connected, dev.icon,
-                    this._enhancedDeviceConfigChanged);
-            const {type: enhanceDeviceType} = enhancedDeviceProps ?? {type: null};
+            const enhancedDeviceProps = this.enhancedDeviceManager?.onDeviceSync(
+                path, dev.connected, dev.icon, dev.alias);
+
+            if (this.enhancedDeviceManager && enhancedDeviceProps &&
+                    enhancedDeviceProps.pendingDetection)
+                continue;
+
+            const enhanceDeviceType = enhancedDeviceProps ? enhancedDeviceProps.type : null;
 
             let props = {};
             let deviceIcon;
@@ -494,15 +489,20 @@ export const BluetoothBatteryMeter = GObject.registerClass({
             const qsLevelEnabled = props.batteryReported || props.isEnhancedDevice
                 ? this.deviceList.get(path).qsLevelEnabled : false;
 
-            const item = new DeviceWidgetManager(this, dev, props.batteryReported, qsLevelEnabled,
-                props.indicatorMode, deviceIcon, enhancedDeviceProps);
+            let item;
+            if (this.enhancedDeviceManager && enhanceDeviceType) {
+                item = new WidgetManagerEnhanced(this, dev, qsLevelEnabled, props.indicatorMode,
+                    deviceIcon, enhancedDeviceProps);
+            } else {
+                item = new WidgetManagerBluez(this, dev, props.batteryReported, qsLevelEnabled,
+                    props.indicatorMode, deviceIcon);
+            }
 
             item.popupMenuItem.connect('notify::visible', () => this._updateDeviceVisibility());
             this._bluetoothToggle._deviceSection.addMenuItem(item.popupMenuItem);
             this._deviceItems.set(path, item);
         }
 
-        this._enhancedDeviceConfigChanged = false;
         const connectedDevices = devices.filter(dev => dev.connected);
         const nConnected = connectedDevices.length;
 
@@ -536,9 +536,16 @@ export const BluetoothBatteryMeter = GObject.registerClass({
     }
 
     _addIndicatorBoxLayout() {
-        this._indicatorBox = new St.BoxLayout();
-        this._indicatorBox.quickSettingsItems = [];
-        Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicatorBox);
+        this._indicatorBox = new St.BoxLayout({
+            x_align: Clutter.ActorAlign.CENTER,
+            style_class: 'panel-status-indicators-box',
+        });
+        if (this._enablePanelButton && !this._panelSingleIndicator && this.panelButton) {
+            this.panelButton.add_child(this._indicatorBox);
+        } else if (this._indicatorEnabled) {
+            this._indicatorBox.quickSettingsItems = [];
+            Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicatorBox);
+        }
         const removedSignal = shellVersion > 45 ? 'child-removed' : 'actor-removed';
         this._indicatorBox.connectObject(
             removedSignal, () => {
@@ -562,44 +569,47 @@ export const BluetoothBatteryMeter = GObject.registerClass({
     }
 
     _setEnhancedDeviceMode() {
-        if (this._enableEnhancedDeviceMode && !this.enhancedDeviceManager) {
-            this._setPanelButtonMode();
+        this.enhancedDeviceManager?.destroy();
+        this.enhancedDeviceManager = null;
+        const enableEnhancedDeviceMode = this.airpodsEnabled || this.gattBasEnabled;
+        if (enableEnhancedDeviceMode && !this.enhancedDeviceManager)
             this.enhancedDeviceManager = new EnhancedDeviceSupportManager(this);
-        } else if (!this._enableEnhancedDeviceMode) {
-            this.enhancedDeviceManager?.stopDbusServiceScript();
-            this.enhancedDeviceManager?.destroy();
-            this.enhancedDeviceManager = null;
-            this._setPanelButtonMode();
-        }
     }
 
-    _setPanelButtonMode() {
-        if (!this._isUnlockSession && this._enablePanelButton &&
-            this._enableEnhancedDeviceMode && !this.panelButton) {
-            this.panelButton = new PanelButton(
-                this._settings, this.gIcon, this._widgetInfo, this._extuuid);
+    _updateIndicatorSettings() {
+        this._indicatorEnabled = this._indicatorType === 1;
+        this._enablePanelButton = this._indicatorType === 2;
+        this.indicatorEnabled =
+                this._indicatorEnabled || this._enablePanelButton && !this._panelSingleIndicator;
+        this.multimodeIndicatorEnabled =
+                this.indicatorEnabled && this._enableMultimodeIndicator;
+        this.hoverModeEnabled = this._indicatorEnabled && this._enableHoverMode;
+
+        this.panelButton?.destroy();
+        this.panelButton = null;
+
+        if (!this.isUnlockSession && this._enablePanelButton && !this.panelButton) {
+            if (this._panelSingleIndicator) {
+                this.panelButton = new PanelButtonSingleDevice(
+                    this.settings, this.gIcon, this.widgetInfo);
+            } else {
+                this.panelButton = new PanelButtonMultiDevice(
+                    this.settings, this.gIcon, this.widgetInfo);
+            }
             Main.panel.addToStatusArea(this._extuuid, this.panelButton);
-        } else if (this._isUnlockSession || !this._enablePanelButton ||
-            !this._enableEnhancedDeviceMode) {
-            this.panelButton?.destroy();
-            this.panelButton = null;
         }
     }
 
     _getColor() {
         const toggleButton = this._bluetoothToggle._box.get_first_child();
-        const accentRGB = toggleButton.get_theme_node().get_background_color();
+        const accentColor = toggleButton.get_theme_node().get_background_color();
         const panelBackgroundRGB = Main.panel.statusArea.quickSettings
             .menu.box.get_theme_node().get_background_color();
-        const panelForegroundRGB = Main.panel.statusArea.quickSettings
-            .menu.box.get_theme_node().get_foreground_color();
-        const panelBackgroundLuminance = rgbToHsl(panelBackgroundRGB.red,
-            panelBackgroundRGB.green, panelBackgroundRGB.blue).l;
-        const adjustLuminanceFactor = panelBackgroundLuminance < 40 ? 15 : -5;
-        const accentHSL =  rgbToHsl(accentRGB.red, accentRGB.green, accentRGB.blue);
-        const accentLuminanceAdjusted = accentHSL.l + adjustLuminanceFactor;
-        this.connectedColor = hslToRgbHex(accentHSL.h, accentHSL.s, accentLuminanceAdjusted);
-        this.disconnectedColor = panelForegroundRGB.to_string().substring(0, 7);
+
+        this.widgetInfo.accentColor = accentColor;
+        const luminanceFactor = isDarkMode(panelBackgroundRGB) ? 15 : -5;
+
+        this.connectedColor = adjustColorLuminanceToRgba(accentColor, luminanceFactor);
         this._colorsAssigned = true;
         this._onActiveChanged();
     }
@@ -621,8 +631,8 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         this._delayedTimerId = null;
         if (this._themeContext)
             this._themeContext.disconnectObject(this);
-        if (this._settings)
-            this._settings.disconnectObject(this);
+        if (this.settings)
+            this.settings.disconnectObject(this);
         Main.sessionMode.disconnectObject(this);
         this._connectSettingsSignal(false);
         this._upowerClient?.destroy();
@@ -639,7 +649,7 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         this.deviceList = null;
         this._removeIndicatorBoxLayout();
         this._themeContext = null;
-        this._settings = null;
+        this.settings = null;
         if (this._bluetoothToggle && this._originalRemoveDevice)
             this._bluetoothToggle._removeDevice = this._originalRemoveDevice;
         this._originalRemoveDevice = null;
@@ -659,68 +669,3 @@ export const BluetoothBatteryMeter = GObject.registerClass({
     }
 });
 
-function rgbToHsl(r, g, b) {
-    r /= 255;
-    g /= 255;
-    b /= 255;
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    let h, s;
-    const l = (max + min) / 2;
-
-    if (max === min) {
-        h = s = 0;
-    } else {
-        const delta = max - min;
-        s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-        switch (max) {
-            case r:
-                h = (g - b) / delta + (g < b ? 6 : 0);
-                break;
-            case g:
-                h = (b - r) / delta + 2;
-                break;
-            case b:
-                h = (r - g) / delta + 4;
-                break;
-        }
-        h /= 6;
-    }
-    return {
-        h: h * 360,
-        s: s * 100,
-        l: l * 100,
-    };
-}
-
-function hslToRgbHex(h, s, l) {
-    h /= 360;
-    s /= 100;
-    l /= 100;
-    let r, g, b;
-    if (s === 0) {
-        r = g = b = l;
-    } else {
-        const hue2rgb = (p, q, t) => {
-            if (t < 0)
-                t += 1;
-            if (t > 1)
-                t -= 1;
-            if (t < 1 / 6)
-                return p + (q - p) * 6 * t;
-            if (t < 1 / 2)
-                return q;
-            if (t < 2 / 3)
-                return p + (q - p) * (2 / 3 - t) * 6;
-            return p;
-        };
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1 / 3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1 / 3);
-    }
-    const hex = `#${((1 << 24) + (Math.round(r * 255) << 16) +
-        (Math.round(g * 255) << 8) + Math.round(b * 255)).toString(16).slice(1)}`;
-    return hex;
-}

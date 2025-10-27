@@ -67,7 +67,8 @@ export default class QSAP extends Extension {
             if (name !== "autohide-profile-switcher" &&
                 name !== "ignore-virtual-capture-streams" &&
                 name !== "always-show-input-volume-slider" &&
-                name !== "remove-output-volume-slider") {
+                name !== "remove-output-volume-slider" &&
+                name !== "profiles-renames") {
                 this._refresh_panel();
             }
         });
@@ -402,6 +403,7 @@ class ExtensionController {
         this.input_volume_slider = input_volume_indicator._input;
         this.input_visibility = false;
         this.input_is_recursing = false;
+        this.update_renames_list();
         this.connect_setting("changed::pactl-path", () => {
             this.pactl_path = get_pactl_path(settings)[0] || undefined;
         });
@@ -438,6 +440,27 @@ class ExtensionController {
         if (handler_id) {
             object_map.delete(signal);
             object.disconnect(handler_id);
+        }
+    }
+    update_renames_list() {
+        const control = Volume.getMixerControl();
+        const add_card = (card) => {
+            const renames = this.settings.get_value("profiles-renames").recursiveUnpack();
+            if (!(card.name in renames))
+                renames[card.name] = {};
+            const card_renames = renames[card.name];
+            for (const profile of card.get_profiles()) {
+                if (!(profile.profile in card_renames))
+                    card_renames[profile.profile] = [profile.human_profile, profile.human_profile];
+            }
+            this.settings.set_value("profiles-renames", new GLib.Variant("a{sa{s(ss)}}", renames));
+        };
+        this.connect(control, "card-added", (_, id) => {
+            const card = control.lookup_card_id(id);
+            add_card(card);
+        });
+        for (const card of control.get_cards()) {
+            add_card(card);
         }
     }
     set_ignore_virtual_capture_streams(enable) {

@@ -3,6 +3,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gvc from 'gi://Gvc';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -341,11 +342,18 @@ export const AudioProfileSwitcher = GObject.registerClass(class AudioProfileSwit
         this._settings.emit('changed::autohide-profile-switcher', 'autohide-profile-switcher');
     }
     _set_device(device) {
+        this._settings.disconnect_object(this.menu);
         this.menu.removeAll();
         this._profileItems.clear();
         this._device = device;
         for (const profile of device.get_profiles()) {
-            const item = new PopupMenuItem(profile.human_profile);
+            const item = new PopupMenuItem("");
+            this._settings.connect_object("changed::profiles-renames", () => {
+                const renames = this._settings.get_value("profiles-renames").recursiveUnpack();
+                item.label.text = renames[device.origin][profile.profile][1];
+                this._sync_active_profile();
+            }, this.menu);
+            this._settings.emit("changed::profiles-renames", "profiles-renames");
             const profile_name = profile.profile;
             item.connect("activate", () => {
                 this._mixer_control.change_profile_on_selected_device(device, profile_name);
@@ -376,6 +384,7 @@ export const AudioProfileSwitcher = GObject.registerClass(class AudioProfileSwit
         }
     }
     destroy() {
+        this._settings.disconnect_object(this.menu);
         this._mixer_control.disconnect(this._active_output_update_signal);
         this._settings.disconnect(this._autohide_changed_signal);
     }
@@ -543,7 +552,7 @@ const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSli
         this._pactl_path = get_pactl_path(settings)[0];
         if (this._pactl_path) {
             this._control.connectObject('output-added', (_control, id) => this._addDevice(id), 'output-removed', (_control, id) => this._removeDevice(id), 'active-output-update', (_control, _id) => this._checkUsedSink(), this);
-            // unfortunatly we don't have any signal to know that the active device changed
+            // unfortunately we don't have any signal to know that the active device changed
             //stream.connect('', () => this._setActiveDevice());
             for (const sink of control.get_sinks()) {
                 // apparently it's possible that this function return null
@@ -553,10 +562,10 @@ const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSli
                 }
             }
         }
-        // This line need to be BEFORE this.stream assignement to prevent an error from appearing in the logs.
+        // This line need to be BEFORE this.stream assignment to prevent an error from appearing in the logs.
         this._icons = [stream.name ? stream.name.toLowerCase() : stream.icon_name];
         this.stream = stream;
-        // And this one need to be after this.stream assignement.
+        // And this one need to be after this.stream assignment.
         this._icon.fallback_icon_name = stream.icon_name;
         if (this._pactl_path) {
             this._checkUsedSink();
@@ -576,8 +585,29 @@ const ApplicationVolumeSlider = GObject.registerClass(class ApplicationVolumeSli
         this._menuButton.visible = menu_button_visible; // we need to reset `actor.visible` when changing parent
         // this prevent the tall panel bug when the button is shown
         this._menuButton.y_expand = false;
-        this._label = new St.Label({ natural_width: 0 });
+        this._label = new St.Label({ natural_width: 0, track_hover: true, reactive: true });
         this._label.style_class = "QSAP-application-volume-slider-label";
+        this._label.clutter_text.line_wrap = true;
+        this._label.connect("notify::hover", () => {
+            if (this._label.__qsap_hover_timeout_id) {
+                clearTimeout(this._label.__qsap_hover_timeout_id);
+            }
+            if (this._label.hover) {
+                this._label.__qsap_hover_timeout_id = setTimeout(() => {
+                    if (this._label.hover) {
+                        this._label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+                    }
+                }, 1000);
+            }
+            else {
+                this._label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            }
+        });
+        this._label.connect("destroy", () => {
+            if (this._label.__qsap_hover_timeout_id) {
+                clearTimeout(this._label.__qsap_hover_timeout_id);
+            }
+        });
         const n_desc_handler_id = stream.connect("notify::description", stream => this._update_label(stream));
         this.connect("destroy", () => stream.disconnect(n_desc_handler_id));
         this._update_label(stream);
