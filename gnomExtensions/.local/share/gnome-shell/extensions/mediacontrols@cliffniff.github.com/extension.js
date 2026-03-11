@@ -12,8 +12,8 @@ import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 
 import PanelButton from "./helpers/shell/PanelButton.js";
 import PlayerProxy from "./helpers/shell/PlayerProxy.js";
-import { debugLog, enumValueByIndex, errorLog, handleError } from "./utils/common.js";
-import { getAppInfoByIdAndEntry, createDbusProxy } from "./utils/shell_only.js";
+import { debugLog, enumValueByIndex, errorLog } from "./utils/common.js";
+import { getAppInfoByIdAndEntry, getAppByIdAndEntry, createDbusProxy } from "./utils/shell_only.js";
 import {
     PlaybackStatus,
     WidgetFlags,
@@ -48,6 +48,18 @@ export default class MediaControls extends Extension {
      * @type {boolean}
      */
     scrollLabels;
+
+    /**
+     * @public
+     * @type {number}
+     */
+    scrollSpeed;
+
+    /**
+     * @public
+     * @type {number}
+     */
+    scrollPauseTime;
 
     /**
      * @public
@@ -254,7 +266,7 @@ export default class MediaControls extends Extension {
     enable() {
         this.playerProxies = new Map();
         this.initSettings();
-        this.initProxies().catch(handleError);
+        this.initProxies().catch(errorLog);
         this.updateMediaNotificationVisiblity();
         Main.wm.addKeybinding(
             "mediacontrols-show-popup-menu",
@@ -310,6 +322,8 @@ export default class MediaControls extends Extension {
         this.labelWidth = this.settings.get_uint("label-width");
         this.isFixedLabelWidth = this.settings.get_boolean("fixed-label-width");
         this.scrollLabels = this.settings.get_boolean("scroll-labels");
+        this.scrollSpeed = this.settings.get_uint("scroll-speed");
+        this.scrollPauseTime = this.settings.get_uint("scroll-pause-time") * 1000;
         this.hideMediaNotification = this.settings.get_boolean("hide-media-notification");
         this.showTrackSlider = this.settings.get_boolean("show-track-slider");
         this.showLabel = this.settings.get_boolean("show-label");
@@ -343,6 +357,14 @@ export default class MediaControls extends Extension {
         });
         this.settings.connect("changed::scroll-labels", () => {
             this.scrollLabels = this.settings.get_boolean("scroll-labels");
+            this.panelBtn?.updateWidgets(WidgetFlags.PANEL_LABEL | WidgetFlags.MENU_LABELS);
+        });
+        this.settings.connect("changed::scroll-speed", () => {
+            this.scrollSpeed = this.settings.get_uint("scroll-speed");
+            this.panelBtn?.updateWidgets(WidgetFlags.PANEL_LABEL | WidgetFlags.MENU_LABELS);
+        });
+        this.settings.connect("changed::scroll-pause-time", () => {
+            this.scrollPauseTime = this.settings.get_uint("scroll-pause-time") * 1000;
             this.panelBtn?.updateWidgets(WidgetFlags.PANEL_LABEL | WidgetFlags.MENU_LABELS);
         });
         this.settings.connect("changed::hide-media-notification", () => {
@@ -457,7 +479,7 @@ export default class MediaControls extends Extension {
         );
         const mprisResult = mprisXmlFile.load_contents_async(null);
         const watchResult = watchXmlFile.load_contents_async(null);
-        const readResults = await Promise.all([mprisResult, watchResult]).catch(handleError);
+        const readResults = await Promise.all([mprisResult, watchResult]).catch(errorLog);
         if (readResults == null) {
             errorLog("Failed to read xml files");
             return;
@@ -486,7 +508,7 @@ export default class MediaControls extends Extension {
         this.mprisIfaceInfo = mprisInterface;
         this.mprisPlayerIfaceInfo = mprisPlayerInterface;
         this.propertiesIfaceInfo = propertiesInterface;
-        const initWatchSuccess = await this.initWatchProxy().catch(handleError);
+        const initWatchSuccess = await this.initWatchProxy().catch(errorLog);
         if (initWatchSuccess === false) {
             errorLog("Failed to init watch proxy");
             return;
@@ -499,9 +521,7 @@ export default class MediaControls extends Extension {
      * @returns {Promise<boolean>}
      */
     async initWatchProxy() {
-        this.watchProxy = await createDbusProxy(this.watchIfaceInfo, DBUS_IFACE_NAME, DBUS_OBJECT_PATH).catch(
-            handleError,
-        );
+        this.watchProxy = await createDbusProxy(this.watchIfaceInfo, DBUS_IFACE_NAME, DBUS_OBJECT_PATH).catch(errorLog);
         if (this.watchProxy == null) {
             return false;
         }
@@ -523,7 +543,7 @@ export default class MediaControls extends Extension {
      * @returns {Promise<void>}
      */
     async addRunningPlayers() {
-        const namesResult = await this.watchProxy.ListNamesAsync().catch(handleError);
+        const namesResult = await this.watchProxy.ListNamesAsync().catch(errorLog);
         if (namesResult == null) {
             errorLog("Failed to get bus names");
             return;
@@ -535,7 +555,7 @@ export default class MediaControls extends Extension {
             if (this.playerProxies.has(busName)) continue;
             promises.push(this.addPlayer(busName));
         }
-        await Promise.all(promises).catch(handleError);
+        await Promise.all(promises).catch(errorLog);
     }
 
     /**
@@ -549,7 +569,7 @@ export default class MediaControls extends Extension {
             const playerProxy = new PlayerProxy(busName);
             const initSuccess = await playerProxy
                 .initPlayer(this.mprisIfaceInfo, this.mprisPlayerIfaceInfo, this.propertiesIfaceInfo)
-                .catch(handleError);
+                .catch(errorLog);
             if (initSuccess == null || initSuccess === false) {
                 errorLog("Failed to init player:", busName);
                 return;
@@ -566,7 +586,6 @@ export default class MediaControls extends Extension {
             });
             this.playerProxies.set(busName, playerProxy);
             this.panelBtn?.updateWidgets(WidgetFlags.MENU_PLAYERS);
-            this.setActivePlayer();
         } catch (e) {
             errorLog("Failed to add player:", busName, e);
         }
@@ -617,10 +636,20 @@ export default class MediaControls extends Extension {
                 }
             }
         }
-        debugLog("Chosen player:", chosenPlayer?.busName);
+
+        // Check if the chosen player has actually changed
+        const currentBusName = this.panelBtn?.playerProxy?.busName;
+        const chosenBusName = chosenPlayer?.busName;
+
         if (chosenPlayer == null) {
-            this.removePanelButton();
+            if (currentBusName != null) {
+                debugLog("Chosen player: none");
+                this.removePanelButton();
+            }
         } else {
+            if (currentBusName !== chosenBusName) {
+                debugLog("Chosen player:", chosenPlayer.busName);
+            }
             if (this.panelBtn == null) {
                 this.addPanelButton(chosenPlayer.busName);
             } else {
@@ -630,18 +659,45 @@ export default class MediaControls extends Extension {
     }
 
     /**
+     * Checks if a player is in the user's blacklist.
+     * Uses multiple lookup strategies to handle inconsistencies between MPRIS identities
+     * and system desktop entries, especially for sandboxed apps (Snap/Flatpak).
+     *
      * @private
-     * @param {string} id
-     * @param {string} entry
-     * @returns {boolean}
+     * @param {string} id - The MPRIS Identity (e.g., "Spotify")
+     * @param {string} entry - The Desktop Entry name (e.g., "spotify")
+     * @returns {boolean} - True if the player is blacklisted
      */
     isPlayerBlacklisted(id, entry) {
-        const app = getAppInfoByIdAndEntry(id, entry);
+        // Standard AppInfo lookup (fastest)
+        let app = getAppInfoByIdAndEntry(id, entry);
+
+        // Shell AppSystem lookup
+        // Necessary for finding running apps that standard AppInfo misses (e.g., Snaps)
         if (app == null) {
-            return false;
+            app = getAppByIdAndEntry(id, entry);
         }
-        const appId = app.get_id();
-        return this.blacklistedPlayers.includes(appId);
+
+        // Check if the resolved App ID matches the blacklist
+        if (app != null) {
+            const appId = app.get_id();
+            if (this.blacklistedPlayers.includes(appId)) {
+                return true;
+            }
+        }
+
+        // Raw string fallback
+        const checkRaw = (name) => {
+            return (
+                name && (this.blacklistedPlayers.includes(name) || this.blacklistedPlayers.includes(`${name}.desktop`))
+            );
+        };
+
+        if (checkRaw(entry) || checkRaw(id)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -650,24 +706,21 @@ export default class MediaControls extends Extension {
      * @returns {void}
      */
     updateMediaNotificationVisiblity(shouldReset = false) {
+        const MprisSource = Mpris.MprisSource ?? Mpris.MediaSection;
+        const mediaSource =
+            Main.panel.statusArea.dateMenu._messageList._messageView?._mediaSource ??
+            Main.panel.statusArea.dateMenu._messageList._mediaSection;
+
         if (this.mediaSectionAddFunc && (shouldReset || this.hideMediaNotification === false)) {
-            Mpris.MprisSource.prototype._addPlayer = this.mediaSectionAddFunc;
+            MprisSource.prototype._addPlayer = this.mediaSectionAddFunc;
             this.mediaSectionAddFunc = null;
-            // @ts-expect-error
-            Main.panel.statusArea.dateMenu._messageList._messageView._mediaSource._onProxyReady();
+            mediaSource._onProxyReady();
         } else {
-            this.mediaSectionAddFunc = Mpris.MprisSource.prototype._addPlayer;
-            Mpris.MprisSource.prototype._addPlayer = function () {};
-            // @ts-expect-error
-            if (Main.panel.statusArea.dateMenu._messageList._messageView._mediaSource._players != null) {
-                // @ts-expect-error
-                for (const player of Main.panel.statusArea.dateMenu._messageList._messageView._mediaSource._players.values()) {
-                    // @ts-expect-error
-                    Main.panel.statusArea.dateMenu._messageList._messageView._mediaSource._onNameOwnerChanged(
-                        null,
-                        null,
-                        [player._busName, player._busName, ""],
-                    );
+            this.mediaSectionAddFunc = MprisSource.prototype._addPlayer;
+            MprisSource.prototype._addPlayer = function () {};
+            if (mediaSource._players != null) {
+                for (const player of mediaSource._players.values()) {
+                    mediaSource._onNameOwnerChanged(null, null, [player._busName, player._busName, ""]);
                 }
             }
         }
@@ -707,6 +760,7 @@ export default class MediaControls extends Extension {
         this.labelWidth = null;
         this.hideMediaNotification = null;
         this.scrollLabels = null;
+        this.scrollSpeed = null;
         this.showLabel = null;
         this.showPlayerIcon = null;
         this.showControlIcons = null;

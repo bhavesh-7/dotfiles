@@ -9,6 +9,8 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {BatterySetWidget} from './batterySetWidget.js';
 import {ToggleButtonsSet} from './toggleButtonsSet.js';
 import {OptionsBox} from './optionsBox.js';
+import {Tooltip} from './tooltip.js';
+import {LabelIndicators} from './labelIndicators.js';
 
 const [major] = Config.PACKAGE_VERSION.split('.');
 const shellVersion = Number.parseInt(major);
@@ -27,11 +29,11 @@ export const PopupMenuWidgetBox = GObject.registerClass({
         this._showCollapseButton = headerButtons.collapse;
         this._showBtPairButton = headerButtons.btPair;
         this._showPinButton = headerButtons.pin;
-        this._showSettingsButton = this._config.showSettingsButton;
+        this._showSettingsButton = this._config.showSettingsButton && !widgetInfo.isUnlockSession;
 
-        const theme = St.ThemeContext.get_for_stage(global.stage);
-        const scaleFactor = theme.scaleFactor * 16;
-        const batteryIconSize = scaleFactor * 2;
+        const showTooltips = settings.get_boolean('enable-tooltip');
+        if (showTooltips)
+            this._tooltip = new Tooltip(this);
 
         const titleHbox = new St.BoxLayout({style_class: 'bbm-popup-titlebox', x_expand: true});
         this.add_child(titleHbox);
@@ -49,7 +51,7 @@ export const PopupMenuWidgetBox = GObject.registerClass({
             const spacer = new St.Bin({x_expand: true, style_class: 'bbm-popupmenu-expander'});
             titleHbox.add_child(spacer);
 
-            headerButton = () => {
+            headerButton = buttonName => {
                 const icon = new St.Icon({style_class: 'bbm-header-icon'});
                 const button = new St.Button({
                     style_class: 'button bbm-header-button',
@@ -57,6 +59,8 @@ export const PopupMenuWidgetBox = GObject.registerClass({
                     child: icon,
                 });
                 button.icon = icon;
+                button.accessible_name = buttonName;
+                this._tooltip?.attach(button, buttonName);
                 const bin = new St.Bin({
                     style_class: 'bbm-header-bin',
                     y_align: Clutter.ActorAlign.CENTER,
@@ -68,8 +72,7 @@ export const PopupMenuWidgetBox = GObject.registerClass({
         }
 
         if (this._showPinButton) {
-            this._pinButton = headerButton();
-            this._pinButton.accessible_name = _('Pin to panel');
+            this._pinButton = headerButton(_('Pin to panel'));
             titleHbox.add_child(this._pinButton.bin);
             this._isSelectedDevice =
                     this._settings.get_string('default-selected-path') === path;
@@ -89,10 +92,9 @@ export const PopupMenuWidgetBox = GObject.registerClass({
         }
 
         if (this._showSettingsButton) {
-            this._settingsButton = headerButton();
+            this._settingsButton = headerButton(_('Device settings'));
             titleHbox.add_child(this._settingsButton.bin);
             this._settingsButton.icon.gicon = this._gIcon('bbm-settings-symbolic.svg');
-            this._settingsButton.accessible_name = _('Device settings');
 
             this._settingsButton.connectObject('clicked', () => {
                 this._dataHandler.emitUIAction('settingsButtonClicked', 0);
@@ -100,15 +102,13 @@ export const PopupMenuWidgetBox = GObject.registerClass({
         }
 
         if (this._showCollapseButton) {
-            this.collapseButton = headerButton();
+            this.collapseButton = headerButton(_('Collapse submenu'));
             this.collapseButton.icon.icon_name = 'pan-up-symbolic';
-            this.collapseButton.accessible_name = _('Collapse submenu');
             titleHbox.add_child(this.collapseButton.bin);
         }
 
         if (this._showBtPairButton) {
-            this.btPairButton = headerButton();
-            this.btPairButton.accessible_name = _('Disconnect');
+            this.btPairButton = headerButton(_('Disconnect'));
             titleHbox.add_child(this.btPairButton.bin);
         }
 
@@ -127,8 +127,7 @@ export const PopupMenuWidgetBox = GObject.registerClass({
         const startBin = new St.Bin({style_class: 'bbm-panel-start-bin'});
         this._batteryBox.add_child(startBin);
 
-        this._batterySetWidget = new BatterySetWidget(
-            batteryIconSize, widgetInfo, this._dataHandler);
+        this._batterySetWidget = new BatterySetWidget(widgetInfo, this._dataHandler);
         this._batteryBox.add_child(this._batterySetWidget);
 
         const button1Enabled = this._config.toggle1Button1Icon && this._config.toggle1Button2Icon;
@@ -142,7 +141,7 @@ export const PopupMenuWidgetBox = GObject.registerClass({
             this.add_child(this._menuSeparator1);
 
             this._set1ToggleButtons =
-                new ToggleButtonsSet(this._gIcon, false, this._dataHandler);
+                new ToggleButtonsSet(this._gIcon, this._tooltip, false, this._dataHandler);
             this.add_child(this._set1ToggleButtons);
 
             this._set1ToggleButtons.bind_property('visible',
@@ -175,7 +174,7 @@ export const PopupMenuWidgetBox = GObject.registerClass({
             this.add_child(this._menuSeparator2);
 
             this._set2ToggleButtons =
-                new ToggleButtonsSet(this._gIcon, true, this._dataHandler);
+                new ToggleButtonsSet(this._gIcon, this._tooltip, true, this._dataHandler);
 
             this.add_child(this._set2ToggleButtons);
 
@@ -184,13 +183,27 @@ export const PopupMenuWidgetBox = GObject.registerClass({
                 GObject.BindingFlags.SYNC_CREATE);
         }
 
+        if (this._config.labelIndicatorEnabled > 0) {
+            this._menuSeparator3 = new St.Widget({
+                style_class: 'bbm-menu-separator',
+                x_expand: true,
+            });
+            this.add_child(this._menuSeparator3);
+
+            this._labelIndicator = new LabelIndicators(colorInfo, this._dataHandler);
+            this.add_child(this._labelIndicator);
+
+            this._labelIndicator.bind_property('visible',
+                this._menuSeparator3, 'visible',
+                GObject.BindingFlags.SYNC_CREATE);
+        }
+
         this._updateVisibility();
 
         this._dataHandler.connectObject(
             'configuration-changed', () => {
                 this._batterySetWidget.destroy();
-                this._batterySetWidget = new BatterySetWidget(
-                    batteryIconSize, widgetInfo, this._dataHandler);
+                this._batterySetWidget = new BatterySetWidget(widgetInfo, this._dataHandler);
                 this._batteryBox.add_child(this._batterySetWidget);
                 const albumArtIcon = this._dataHandler.getConfig().albumArtIcon;
                 this._modelIcon.gicon = this._gIcon(`bbm-art-${albumArtIcon}.png`);
@@ -201,6 +214,11 @@ export const PopupMenuWidgetBox = GObject.registerClass({
             },
             this
         );
+
+        this.connectObject('destroy', () => {
+            this._tooltip?.destroy();
+            this._tooltip = null;
+        }, this);
     }
 
     _updateVisibility() {
@@ -248,10 +266,10 @@ export const PopupMenuWidget = GObject.registerClass({
         const themeNode = this.peek_theme_node();
         if (themeNode === null) {
             this.connectObject('style-changed', () => {
-                const isStaged = this.get_stage();
-                if (isStaged) {
+                const node = this.peek_theme_node();
+                if (node !== null) {
                     this.disconnectObject(this);
-                    this._finalizeWidget(this.peek_theme_node());
+                    this._finalizeWidget(node);
                 }
             }, this);
         } else {
@@ -261,7 +279,6 @@ export const PopupMenuWidget = GObject.registerClass({
 
     _finalizeWidget(themeNode) {
         const colorInfo = {
-            isDarkMode: this._widgetInfo.isDarkMode,
             accentColor: this._widgetInfo.accentColor,
             foregroundColor: themeNode.get_foreground_color(),
         };

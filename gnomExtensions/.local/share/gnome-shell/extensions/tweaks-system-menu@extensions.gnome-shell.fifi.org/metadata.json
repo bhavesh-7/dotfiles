@@ -9,10 +9,11 @@
     "46",
     "47",
     "48",
-    "49"
+    "49",
+    "50"
   ],
   "url": "https://github.com/F-i-f/tweaks-system-menu",
   "uuid": "tweaks-system-menu@extensions.gnome-shell.fifi.org",
-  "vcs_revision": "v26-0-g62e895e",
-  "version": 26
+  "vcs_revision": "v27-0-g2017854",
+  "version": 27
 }

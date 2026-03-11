@@ -6,9 +6,12 @@
   "original-author": "GopI",
   "settings-schema": "org.gnome.shell.extensions.disconnect-wifi",
   "shell-version": [
-    "48"
+    "46",
+    "47",
+    "48",
+    "49"
   ],
   "url": "https://github.com/kgshank/gse-disconnect-wifi",
   "uuid": "disconnect-wifi@kgshank.net",
-  "version": 36
+  "version": 38
 }

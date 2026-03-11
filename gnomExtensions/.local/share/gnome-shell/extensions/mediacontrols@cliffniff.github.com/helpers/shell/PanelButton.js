@@ -15,10 +15,11 @@ import St from "gi://St";
 import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
 import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
 import { gettext as _ } from "resource:///org/gnome/shell/extensions/extension.js";
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 
 import ScrollingLabel from "./ScrollingLabel.js";
 import MenuSlider from "./MenuSlider.js";
-import { debugLog, handleError } from "../../utils/common.js";
+import { debugLog, errorLog } from "../../utils/common.js";
 import { getAppByIdAndEntry, getImage } from "../../utils/shell_only.js";
 import { ControlIconOptions } from "../../types/enums/shell_only.js";
 import {
@@ -151,7 +152,7 @@ class PanelButton extends PanelMenu.Button {
 
     /**
      * @private
-     * @type {number}
+     * @type {number | null}
      */
     doubleTapSourceId;
     /**
@@ -169,12 +170,24 @@ class PanelButton extends PanelMenu.Button {
         this.playerProxy = playerProxy;
         this.extension = extension;
         this.changeListenerIds = new Map();
+        this.doubleTapSourceId = null;
         this.updateWidgets(WidgetFlags.ALL);
         this.addProxyListeners();
         this.initActions();
         // @ts-expect-error
         this.menu.box.add_style_class_name("popup-menu-container");
         this.connect("destroy", this.onDestroy.bind(this));
+    }
+
+    /**
+     * Override vfunc_event to handle button clicks before parent class
+     * @param {Clutter.Event} _event
+     * @returns {boolean}
+     */
+    vfunc_event(_event) {
+        // Do not call super.vfunc_event() because it will handle the event
+        // and possibly open the menu
+        return Clutter.EVENT_PROPAGATE;
     }
 
     /**
@@ -185,6 +198,7 @@ class PanelButton extends PanelMenu.Button {
     updateProxy(playerProxy) {
         if (this.isSamePlayer(playerProxy) === false) {
             debugLog(`Updating proxy to ${playerProxy.busName}`);
+            this.removeProxyListeners();
             this.playerProxy = playerProxy;
             this.updateWidgets(WidgetFlags.ALL);
             this.addProxyListeners();
@@ -232,6 +246,7 @@ class PanelButton extends PanelMenu.Button {
                     this.addButtonIcon(i);
                 } else if (this.buttonIcon != null) {
                     this.buttonBox.remove_child(this.buttonIcon);
+                    this.buttonIcon.destroy();
                     this.buttonIcon = null;
                 }
             }
@@ -243,6 +258,7 @@ class PanelButton extends PanelMenu.Button {
                     this.addButtonLabel(i);
                 } else if (this.buttonLabel != null) {
                     this.buttonBox.remove_child(this.buttonLabel);
+                    this.buttonLabel.destroy();
                     this.buttonLabel = null;
                 }
             }
@@ -254,6 +270,7 @@ class PanelButton extends PanelMenu.Button {
                     this.addButtonControls(i, flags);
                 } else if (this.buttonControls != null) {
                     this.buttonBox.remove_child(this.buttonControls);
+                    this.buttonControls.destroy();
                     this.buttonControls = null;
                 }
             }
@@ -262,16 +279,17 @@ class PanelButton extends PanelMenu.Button {
             this.addMenuPlayers();
         }
         if (flags & WidgetFlags.MENU_IMAGE) {
-            this.addMenuImage().catch(handleError);
+            this.addMenuImage().catch(errorLog);
         }
         if (flags & WidgetFlags.MENU_LABELS) {
             this.addMenuLabels();
         }
         if (flags & WidgetFlags.MENU_SLIDER) {
             if (this.extension.showTrackSlider) {
-                this.addMenuSlider().catch(handleError);
+                this.addMenuSlider().catch(errorLog);
             } else if (this.menuSlider != null) {
                 this.menuBox.remove_child(this.menuSlider);
+                this.menuSlider.destroy();
                 this.menuSlider = null;
             }
         }
@@ -294,7 +312,7 @@ class PanelButton extends PanelMenu.Button {
     addMenuPlayers() {
         if (this.menuPlayers == null) {
             this.menuPlayers = new St.BoxLayout({
-                orientation: Clutter.Orientation.VERTICAL,
+                vertical: true,
             });
         }
         if (this.menuPlayersTextBox == null) {
@@ -328,15 +346,33 @@ class PanelButton extends PanelMenu.Button {
                 xExpand: true,
                 reactive: true,
             });
-            const tapAction = new Clutter.TapAction();
-            tapAction.connect("tap", () => {
-                if (this.playerProxy.isPlayerPinned()) {
-                    this.playerProxy.unpinPlayer();
-                } else {
-                    this.playerProxy.pinPlayer();
+
+            if (typeof Clutter.ClickGesture !== "undefined") {
+                const pinClickAction = new Clutter.ClickGesture();
+                pinClickAction.set_n_clicks_required(1);
+                if (pinClickAction.set_recognize_on_press) {
+                    pinClickAction.set_recognize_on_press(true);
                 }
-            });
-            this.menuPlayersTextBoxPin.add_action(tapAction);
+                pinClickAction.connect("recognize", () => {
+                    if (this.playerProxy.isPlayerPinned()) {
+                        this.playerProxy.unpinPlayer();
+                    } else {
+                        this.playerProxy.pinPlayer();
+                    }
+                    return Clutter.EVENT_STOP;
+                });
+                this.menuPlayersTextBoxPin.add_action(pinClickAction);
+            } else {
+                const pinClickAction = new Clutter.ClickAction();
+                pinClickAction.connect("clicked", () => {
+                    if (this.playerProxy.isPlayerPinned()) {
+                        this.playerProxy.unpinPlayer();
+                    } else {
+                        this.playerProxy.pinPlayer();
+                    }
+                });
+                this.menuPlayersTextBoxPin.add_action(pinClickAction);
+            }
         }
         const players = this.extension.getPlayers();
         if (players.length > 1 && this.menuPlayerIcons == null) {
@@ -344,10 +380,12 @@ class PanelButton extends PanelMenu.Button {
                 styleClass: "popup-menu-player-icons",
             });
         } else if (players.length === 1 && this.menuPlayerIcons != null) {
+            this.menuPlayerIcons.get_children().forEach((child) => child.destroy());
             this.menuPlayers.remove_child(this.menuPlayerIcons);
+            this.menuPlayerIcons.destroy();
             this.menuPlayerIcons = null;
-        } else {
-            this.menuPlayerIcons?.remove_all_children();
+        } else if (this.menuPlayerIcons != null) {
+            this.menuPlayerIcons.get_children().forEach((child) => child.destroy());
         }
         const isPinned = this.playerProxy.isPlayerPinned();
         this.menuPlayersTextBoxPin.opacity = isPinned ? 255 : 160;
@@ -397,9 +435,23 @@ class PanelButton extends PanelMenu.Button {
                 if (isSamePlayer) {
                     icon.add_style_class_name("popup-menu-player-icons-icon-active");
                 } else {
-                    const tapAction = new Clutter.TapAction();
-                    tapAction.connect("tap", this.updateProxy.bind(this, player));
-                    icon.add_action(tapAction);
+                    if (typeof Clutter.ClickGesture !== "undefined") {
+                        const clickAction = new Clutter.ClickGesture();
+                        if (clickAction.set_recognize_on_press) {
+                            clickAction.set_recognize_on_press(true);
+                        }
+                        clickAction.connect("recognize", () => {
+                            this.updateProxy(player);
+                            return Clutter.EVENT_STOP;
+                        });
+                        icon.add_action(clickAction);
+                    } else {
+                        const clickAction = new Clutter.ClickAction();
+                        clickAction.connect("clicked", () => {
+                            this.updateProxy(player);
+                        });
+                        icon.add_action(clickAction);
+                    }
                 }
                 this.menuPlayerIcons.add_child(icon);
             }
@@ -415,8 +467,8 @@ class PanelButton extends PanelMenu.Button {
         }
         if (this.menuPlayers.get_parent() == null) {
             this.menuBox.add_child(this.menuPlayers);
+            debugLog("Added menu players");
         }
-        debugLog("Added menu players");
     }
 
     /**
@@ -438,8 +490,13 @@ class PanelButton extends PanelMenu.Button {
             if (trackUri != null && trackUri.get_scheme() === "file") {
                 const file = Gio.File.new_for_uri(trackUri.to_string());
                 const info = await file
-                    .query_info_async(Gio.FILE_ATTRIBUTE_THUMBNAIL_PATH, Gio.FileQueryInfoFlags.NONE, null, null)
-                    .catch(handleError);
+                    .query_info_async(
+                        `${Gio.FILE_ATTRIBUTE_THUMBNAIL_PATH},${Gio.FILE_ATTRIBUTE_STANDARD_ICON}`,
+                        Gio.FileQueryInfoFlags.NONE,
+                        null,
+                        null,
+                    )
+                    .catch(errorLog);
                 if (info != null) {
                     const path = info.get_attribute_byte_string(Gio.FILE_ATTRIBUTE_THUMBNAIL_PATH);
                     if (path == null) {
@@ -451,24 +508,25 @@ class PanelButton extends PanelMenu.Button {
                 }
             }
         }
-        const width = this.extension.labelWidth > 0 ? this.getMenuItemWidth() : this.menuLabels.width;
+        const width = this.getMenuItemWidth();
         if (stream != null) {
             /** @type {Promise<GdkPixbuf.Pixbuf>} */
             const pixbufPromise = /** @type {any} */ (GdkPixbuf.Pixbuf.new_from_stream_async(stream, null));
-            const pixbuf = await pixbufPromise.catch(handleError);
+            const pixbuf = await pixbufPromise.catch(errorLog);
             if (pixbuf != null) {
                 const aspectRatio = pixbuf.width / pixbuf.height;
                 const height = width / aspectRatio;
-                const format = pixbuf.hasAlpha ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888;
-                const image = /** @type {St.ImageContent} */ (St.ImageContent.new_with_preferred_size(width, height));
-                const context = global.stage.context.get_backend().get_cogl_context();
-                image.set_bytes(context, pixbuf.pixelBytes, format, pixbuf.width, pixbuf.height, pixbuf.rowstride);
-                this.menuImage.iconSize = -1;
-                this.menuImage.gicon = null;
-                this.menuImage.width = width;
-                this.menuImage.height = height;
-                this.menuImage.content = image;
-                artSet = true;
+                const [success, buffer] = pixbuf.save_to_bufferv("png", [], []);
+                if (success) {
+                    const bytes = GLib.Bytes.new(buffer);
+                    const icon = Gio.BytesIcon.new(bytes);
+                    this.menuImage.content = null;
+                    this.menuImage.gicon = icon;
+                    this.menuImage.iconSize = width;
+                    this.menuImage.width = width;
+                    this.menuImage.height = height;
+                    artSet = true;
+                }
             }
         }
         if (artSet === false) {
@@ -480,8 +538,8 @@ class PanelButton extends PanelMenu.Button {
         }
         if (this.menuImage.get_parent() == null) {
             this.menuBox.insert_child_above(this.menuImage, this.menuPlayers);
+            debugLog("Added menu image");
         }
-        debugLog("Added menu image");
     }
 
     /**
@@ -491,21 +549,24 @@ class PanelButton extends PanelMenu.Button {
     addMenuLabels() {
         if (this.menuLabels == null) {
             this.menuLabels = new St.BoxLayout({
-                orientation: Clutter.Orientation.VERTICAL,
+                vertical: true,
             });
         }
         if (this.menuLabelTitle != null) {
             this.menuLabels.remove_child(this.menuLabelTitle);
+            this.menuLabelTitle.destroy();
         }
         if (this.menuLabelSubtitle != null) {
             this.menuLabels.remove_child(this.menuLabelSubtitle);
+            this.menuLabelSubtitle.destroy();
         }
-        const width = this.extension.labelWidth > 0 ? this.getMenuItemWidth() : 0;
+        const width = this.getMenuItemWidth();
         this.menuLabelTitle = new ScrollingLabel({
             text: this.playerProxy.metadata["xesam:title"],
             isScrolling: this.extension.scrollLabels,
             initPaused: this.playerProxy.playbackStatus !== PlaybackStatus.PLAYING,
             width,
+            scrollSpeed: this.extension.scrollSpeed,
         });
         const artistText = this.playerProxy.metadata["xesam:artist"]?.join(", ") || _("Unknown artist");
         const albumText = this.playerProxy.metadata["xesam:album"] || "";
@@ -515,6 +576,7 @@ class PanelButton extends PanelMenu.Button {
             initPaused: this.playerProxy.playbackStatus !== PlaybackStatus.PLAYING,
             direction: Clutter.TimelineDirection.BACKWARD,
             width,
+            scrollSpeed: this.extension.scrollSpeed,
         });
         this.menuLabelTitle.label.add_style_class_name("popup-menu-label-title");
         this.menuLabelTitle.box.xAlign = Clutter.ActorAlign.CENTER;
@@ -523,8 +585,8 @@ class PanelButton extends PanelMenu.Button {
         this.menuLabels.add_child(this.menuLabelSubtitle);
         if (this.menuLabels.get_parent() == null) {
             this.menuBox.add_child(this.menuLabels);
+            debugLog("Added menu labels");
         }
-        debugLog("Added menu labels");
     }
 
     /**
@@ -532,7 +594,7 @@ class PanelButton extends PanelMenu.Button {
      * @returns {Promise<void>}
      */
     async addMenuSlider() {
-        const position = await this.playerProxy.position.catch(handleError);
+        const position = await this.playerProxy.position.catch(errorLog);
         const length = this.playerProxy.metadata["mpris:length"];
         const rate = this.playerProxy.rate;
         if (this.menuSlider == null) {
@@ -554,8 +616,8 @@ class PanelButton extends PanelMenu.Button {
         }
         if (this.menuSlider.get_parent() == null) {
             this.menuBox.insert_child_above(this.menuSlider, this.menuLabels);
+            debugLog("Added menu slider");
         }
-        debugLog("Added menu slider");
     }
 
     /**
@@ -593,11 +655,19 @@ class PanelButton extends PanelMenu.Button {
                     this.playerProxy.play.bind(this.playerProxy),
                 );
             } else {
-                this.addMenuControlIcon(
-                    ControlIconOptions.PAUSE,
-                    this.playerProxy.canPause && this.playerProxy.canControl,
-                    this.playerProxy.pause.bind(this.playerProxy),
-                );
+                if (this.playerProxy.canControl && !this.playerProxy.canPause) {
+                    this.addMenuControlIcon(
+                        ControlIconOptions.STOP,
+                        this.playerProxy.canControl,
+                        this.playerProxy.stop.bind(this.playerProxy),
+                    );
+                } else {
+                    this.addMenuControlIcon(
+                        ControlIconOptions.PAUSE,
+                        this.playerProxy.canPause && this.playerProxy.canControl,
+                        this.playerProxy.pause.bind(this.playerProxy),
+                    );
+                }
             }
         }
         if (flags & WidgetFlags.MENU_CONTROLS_NEXT) {
@@ -616,8 +686,8 @@ class PanelButton extends PanelMenu.Button {
         }
         if (this.menuControls.get_parent() == null) {
             this.menuBox.add_child(this.menuControls);
+            debugLog("Added menu controls");
         }
-        debugLog("Added menu controls");
     }
 
     /**
@@ -637,9 +707,26 @@ class PanelButton extends PanelMenu.Button {
             reactive,
             ...options.menuProps.options,
         });
-        const tapAction = new Clutter.TapAction();
-        tapAction.connect("tap", onClick);
-        icon.add_action(tapAction);
+
+        if (typeof Clutter.ClickGesture !== "undefined") {
+            const clickGesture = new Clutter.ClickGesture();
+            clickGesture.set_n_clicks_required(1);
+            if (clickGesture.set_recognize_on_press) {
+                clickGesture.set_recognize_on_press(true);
+            }
+            clickGesture.connect("recognize", () => {
+                onClick();
+                return Clutter.EVENT_STOP;
+            });
+            icon.add_action(clickGesture);
+        } else {
+            const clickAction = new Clutter.ClickAction();
+            clickAction.connect("clicked", () => {
+                onClick();
+            });
+            icon.add_action(clickAction);
+        }
+
         const oldIcon = find_child_by_name(this.menuControls, options.name);
         if (oldIcon?.get_parent() === this.menuControls) {
             this.menuControls.replace_child(oldIcon, icon);
@@ -665,9 +752,9 @@ class PanelButton extends PanelMenu.Button {
             this.buttonBox.replace_child(this.buttonIcon, icon);
         } else {
             this.buttonBox.insert_child_at_index(icon, index);
+            debugLog("Added icon");
         }
         this.buttonIcon = icon;
-        debugLog("Added icon");
     }
 
     /**
@@ -682,14 +769,16 @@ class PanelButton extends PanelMenu.Button {
             isFixedWidth: this.extension.isFixedLabelWidth,
             isScrolling: this.extension.scrollLabels,
             initPaused: this.playerProxy.playbackStatus !== PlaybackStatus.PLAYING,
+            scrollSpeed: this.extension.scrollSpeed,
+            scrollPauseTime: this.extension.scrollPauseTime,
         });
         if (this.buttonLabel?.get_parent() === this.buttonBox) {
             this.buttonBox.replace_child(this.buttonLabel, label);
         } else {
             this.buttonBox.insert_child_at_index(label, index);
+            debugLog("Added label");
         }
         this.buttonLabel = label;
-        debugLog("Added label");
     }
 
     /**
@@ -736,11 +825,19 @@ class PanelButton extends PanelMenu.Button {
                         this.playerProxy.canPlay && this.playerProxy.canControl,
                     );
                 } else {
-                    this.addButtonControlIcon(
-                        ControlIconOptions.PAUSE,
-                        this.playerProxy.pause.bind(this.playerProxy),
-                        this.playerProxy.canPause && this.playerProxy.canControl,
-                    );
+                    if (this.playerProxy.canControl && !this.playerProxy.canPause) {
+                        this.addButtonControlIcon(
+                            ControlIconOptions.STOP,
+                            this.playerProxy.stop.bind(this.playerProxy),
+                            this.playerProxy.canControl,
+                        );
+                    } else {
+                        this.addButtonControlIcon(
+                            ControlIconOptions.PAUSE,
+                            this.playerProxy.pause.bind(this.playerProxy),
+                            this.playerProxy.canPause && this.playerProxy.canControl,
+                        );
+                    }
                 }
             } else {
                 this.removeButtonControlIcon(ControlIconOptions.PLAY);
@@ -770,8 +867,8 @@ class PanelButton extends PanelMenu.Button {
         }
         if (this.buttonControls.get_parent() == null) {
             this.buttonBox.insert_child_at_index(this.buttonControls, index);
+            debugLog("Added controls");
         }
-        debugLog("Added controls");
     }
 
     /**
@@ -782,6 +879,11 @@ class PanelButton extends PanelMenu.Button {
      * @returns {void}
      */
     addButtonControlIcon(options, onClick, reactive) {
+        if (options.panelProps === undefined) {
+            debugLog(`Media Controls: panelProps is undefined for ${options.name}`);
+            return;
+        }
+
         const icon = new St.Icon({
             name: options.name,
             iconName: options.iconName,
@@ -789,9 +891,26 @@ class PanelButton extends PanelMenu.Button {
             opacity: reactive ? 255 : 160,
             reactive,
         });
-        const tapAction = new Clutter.TapAction();
-        tapAction.connect("tap", onClick);
-        icon.add_action(tapAction);
+
+        if (typeof Clutter.ClickGesture !== "undefined") {
+            const clickAction = new Clutter.ClickGesture();
+            clickAction.set_n_clicks_required(1);
+            if (clickAction.set_recognize_on_press) {
+                clickAction.set_recognize_on_press(true);
+            }
+            clickAction.connect("recognize", () => {
+                onClick();
+                return Clutter.EVENT_STOP;
+            });
+            icon.add_action(clickAction);
+        } else {
+            const clickAction = new Clutter.ClickAction();
+            clickAction.connect("clicked", () => {
+                onClick();
+            });
+            icon.add_action(clickAction);
+        }
+
         const oldIcon = find_child_by_name(this.buttonControls, options.name);
         if (oldIcon != null) {
             this.buttonControls.replace_child(oldIcon, icon);
@@ -809,6 +928,7 @@ class PanelButton extends PanelMenu.Button {
         const icon = find_child_by_name(this.buttonControls, options.name);
         if (icon != null) {
             this.buttonControls.remove_child(icon);
+            icon.destroy();
         }
     }
 
@@ -833,7 +953,7 @@ class PanelButton extends PanelMenu.Button {
                 labelTextElements.push(labelElement);
             }
         }
-        return labelTextElements.join(" ");
+        return labelTextElements.join(" ").replace(/[\r\n]+/g, " ");
     }
 
     /**
@@ -852,7 +972,6 @@ class PanelButton extends PanelMenu.Button {
      * @returns {void}
      */
     addProxyListeners() {
-        this.removeProxyListeners();
         this.addProxyListener("Metadata", () => {
             this.updateWidgets(
                 WidgetFlags.PANEL_LABEL | WidgetFlags.MENU_IMAGE | WidgetFlags.MENU_LABELS | WidgetFlags.MENU_SLIDER,
@@ -938,56 +1057,69 @@ class PanelButton extends PanelMenu.Button {
      * @returns {void}
      */
     initActions() {
-        const tapAction = new Clutter.TapAction();
-        const swipeAction = new Clutter.SwipeAction();
-        tapAction.connect("tap", () => {
-            const device = tapAction.get_device(tapAction.nTouchPoints - 1);
-            const event = tapAction.get_last_event(tapAction.nTouchPoints - 1);
+        this.connect("button-press-event", (_, /** @type {Clutter.Event} */ event) => {
             const button = event.get_button();
-            if (this.doubleTapSourceId != null) {
-                GLib.source_remove(this.doubleTapSourceId);
-                this.doubleTapSourceId = null;
-                this.doMouseAction(this.extension.mouseActionDouble);
-                return;
+
+            if (button === Clutter.BUTTON_PRIMARY) {
+                this.handleLeftClick();
+                return Clutter.EVENT_STOP;
             }
-            this.doubleTapSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
-                this.doubleTapSourceId = null;
-                if (device.deviceType !== Clutter.InputDeviceType.POINTER_DEVICE) {
-                    this.doMouseAction(this.extension.mouseActionLeft);
-                    return GLib.SOURCE_REMOVE;
-                }
-                if (button === Clutter.BUTTON_PRIMARY) {
-                    this.doMouseAction(this.extension.mouseActionLeft);
-                }
-                if (button === Clutter.BUTTON_MIDDLE) {
-                    this.doMouseAction(this.extension.mouseActionMiddle);
-                }
-                if (button === Clutter.BUTTON_SECONDARY) {
-                    this.doMouseAction(this.extension.mouseActionRight);
-                }
-                return GLib.SOURCE_REMOVE;
-            });
+
+            let action;
+            if (button === Clutter.BUTTON_MIDDLE) {
+                action = this.extension.mouseActionMiddle;
+            } else if (button === Clutter.BUTTON_SECONDARY) {
+                action = this.extension.mouseActionRight;
+            }
+
+            if (action === MouseActions.NONE) {
+                return Clutter.EVENT_PROPAGATE;
+            }
+
+            this.doMouseAction(action);
+            return Clutter.EVENT_STOP;
         });
-        swipeAction.connect("swipe", (_, __, direction) => {
-            if (direction === Clutter.SwipeDirection.RIGHT) {
-                this.doMouseAction(this.extension.mouseActionScrollUp);
+
+        this.connect("touch-event", (_, /** @type {Clutter.Event} */ event) => {
+            const eventType = event.type();
+            if (eventType === Clutter.EventType.TOUCH_BEGIN) {
+                this.handleLeftClick();
+                return Clutter.EVENT_STOP;
             }
-            if (direction === Clutter.SwipeDirection.LEFT) {
-                this.doMouseAction(this.extension.mouseActionScrollDown);
-            }
+
+            return Clutter.EVENT_PROPAGATE;
         });
-        this.connect("scroll-event", (_, event) => {
+
+        this.connect("scroll-event", (_, /** @type {Clutter.Event} */ event) => {
             const direction = event.get_scroll_direction();
             if (direction === Clutter.ScrollDirection.UP) {
                 this.doMouseAction(this.extension.mouseActionScrollUp);
-            }
-            if (direction === Clutter.ScrollDirection.DOWN) {
+            } else if (direction === Clutter.ScrollDirection.DOWN) {
                 this.doMouseAction(this.extension.mouseActionScrollDown);
             }
+            return Clutter.EVENT_STOP;
         });
-        // Tap action is added last to prevent it from blocking button press events
-        this.add_action(swipeAction);
-        this.add_action(tapAction);
+    }
+
+    handleLeftClick() {
+        // Left click uses double-tap detection, but only if there is a
+        // double click action set by the user
+        if (this.extension.mouseActionDouble === MouseActions.NONE) {
+            this.doMouseAction(this.extension.mouseActionLeft);
+            return;
+        }
+
+        if (this.doubleTapSourceId === null) {
+            this.doubleTapSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+                this.doubleTapSourceId = null;
+                this.doMouseAction(this.extension.mouseActionLeft);
+                return GLib.SOURCE_REMOVE;
+            });
+        } else {
+            GLib.source_remove(this.doubleTapSourceId);
+            this.doubleTapSourceId = null;
+            this.doMouseAction(this.extension.mouseActionDouble);
+        }
     }
 
     /**
@@ -1061,6 +1193,12 @@ class PanelButton extends PanelMenu.Button {
     onDestroy() {
         this.removeProxyListeners();
         this.playerProxy = null;
+        // Null out references to child widgets before parent destroys them
+        this.menuSlider = null;
+        this.menuPlayers = null;
+        this.menuImage = null;
+        this.menuLabels = null;
+        this.menuControls = null;
         this.buttonIcon?.destroy();
         this.buttonLabel?.destroy();
         this.buttonControls?.destroy();
@@ -1070,15 +1208,13 @@ class PanelButton extends PanelMenu.Button {
         this.buttonControls = null;
         this.buttonBox = null;
         this.menuBox = null;
-        this.menuPlayers = null;
-        this.menuImage = null;
-        this.menuLabels = null;
-        this.menuSlider = null;
-        this.menuControls = null;
         this.menuPlayersTextBox = null;
         this.menuPlayersTextBoxIcon = null;
         this.menuPlayersTextBoxLabel = null;
         this.menuPlayersTextBoxPin = null;
+        if (this.menuPlayerIcons != null) {
+            this.menuPlayerIcons.get_children().forEach((child) => child.destroy());
+        }
         this.menuPlayerIcons = null;
         this.menuLabelTitle = null;
         this.menuLabelSubtitle = null;

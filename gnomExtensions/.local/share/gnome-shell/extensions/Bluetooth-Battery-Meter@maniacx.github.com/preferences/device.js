@@ -5,7 +5,7 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 import {gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {supportedIcons} from '../lib/widgets/indicatorVectorImages.js';
+import {supportedIcons} from '../lib/widgets/iconGroups.js';
 
 const  ConfigureWindow = GObject.registerClass({
     GTypeName: 'BluetoothBatteryMeter_DeviceConfigureWindow',
@@ -102,6 +102,9 @@ const  ConfigureWindow = GObject.registerClass({
                 const pairedDevice = settings.get_strv('device-list');
                 const existingPathIndex =
                     pairedDevice.findIndex(item => JSON.parse(item).path === pathInfo.path);
+                if (existingPathIndex === -1)
+                    return;
+
                 const existingItem = JSON.parse(pairedDevice[existingPathIndex]);
                 existingItem['icon'] = deviceType;
                 pairedDevice[existingPathIndex] = JSON.stringify(existingItem);
@@ -121,30 +124,25 @@ const  ConfigureWindow = GObject.registerClass({
             title: _('Quick Menu'),
         });
 
-        const quickSettingsRow = new Adw.ActionRow({
+        const quickSettingsSwitchRow = new Adw.SwitchRow({
             title: _('Display Battery Level'),
             subtitle: _('Display battery level in the Bluetooth panel quick menu'),
         });
 
-        const quickSettingSwitch = new Gtk.Switch({
-            valign: Gtk.Align.CENTER,
-        });
-
-        quickSettingSwitch.active = pathInfo.qsLevelEnabled;
-        quickSettingSwitch.connect('notify::active', () => {
+        quickSettingsSwitchRow.active = pathInfo.qsLevelEnabled;
+        quickSettingsSwitchRow.connect('notify::active', () => {
             const pairedDevice = settings.get_strv('device-list');
             const existingPathIndex =
                 pairedDevice.findIndex(item => JSON.parse(item).path === pathInfo.path);
             if (existingPathIndex !== -1) {
                 const existingItem = JSON.parse(pairedDevice[existingPathIndex]);
-                existingItem['qs-level'] = quickSettingSwitch.active;
+                existingItem['qs-level'] = quickSettingsSwitchRow.active;
                 pairedDevice[existingPathIndex] = JSON.stringify(existingItem);
                 settings.set_strv('device-list', pairedDevice);
             }
         });
         quickSettingsGroup.visible =  pathInfo.batteryReported || isEnhancedDevice;
-        quickSettingsRow.add_suffix(quickSettingSwitch);
-        quickSettingsGroup.add(quickSettingsRow);
+        quickSettingsGroup.add(quickSettingsSwitchRow);
         page.add(quickSettingsGroup);
 
         const indicatorGroup = new Adw.PreferencesGroup({

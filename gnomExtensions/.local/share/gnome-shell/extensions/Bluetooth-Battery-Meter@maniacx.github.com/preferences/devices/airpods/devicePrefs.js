@@ -29,7 +29,7 @@ const  DeviceItem = GObject.registerClass({
         this._customiseButton.connect('clicked', () => {
             const parentWindow = this._customiseButton.get_ancestor(Gtk.Window);
             const configureWindow = new ConfigureWindow(settings, this._macAddress,
-                pathInfo.path, parentWindow, _);
+                pathInfo.path, parentWindow, _, true);
 
             configureWindow.present();
         });
@@ -70,6 +70,7 @@ const  DeviceItem = GObject.registerClass({
         this.title = pathInfo.alias;
         this.subtitle = this._macAddress;
         this._deleteButton.sensitive = !this._settings.get_boolean('enable-airpods-device');
+        this._icon.icon_name = `bbm-${pathInfo.icon}-symbolic`;
     }
 
     _pathToMacAddress(path) {
@@ -86,7 +87,6 @@ export const  Airpods = GObject.registerClass({
         import.meta.url, '../../../ui/devices/airpods.ui', GLib.UriFlags.NONE
     ),
     InternalChildren: [
-        'row_airpods_device',
         'enable_airpods_device',
         'airpods_group',
         'no_airpods_paired_row',
@@ -123,7 +123,6 @@ export const  Airpods = GObject.registerClass({
                 icon: info['icon'],
                 alias: info['alias'],
             };
-
             if (this._deviceItems.has(pathInfo.path)) {
                 const row = this._deviceItems.get(pathInfo.path);
                 row.updateProperites(pathInfo);

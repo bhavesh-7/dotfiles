@@ -1,0 +1,8 @@
+#!/bin/bash
+if [[ "$1" == "off" ]]; then
+    systemctl --user stop wayvnc
+    echo "VNC Server stopped"
+else
+    systemctl --user start wayvnc
+    echo "VNC Server started"
+fi

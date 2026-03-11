@@ -4,9 +4,20 @@ import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Rsvg from 'gi://Rsvg';
 import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const [major] = Config.PACKAGE_VERSION.split('.');
 const shellVersion = Number.parseInt(major);
+
+export function getAccentColor() {
+    const tmp = new St.Button({style_class: 'quick-toggle'});
+    tmp.hide();
+    Main.uiGroup.add_child(tmp);
+    tmp.checked = true;
+    const color = tmp.get_theme_node().get_background_color();
+    tmp.destroy();
+    return color;
+}
 
 export function rgbToHsl(r, g, b) {
     r /= 255;
@@ -105,6 +116,16 @@ export function isDarkMode(color) {
     return l < 40;
 }
 
+export function invertColor(color) {
+    const ColorClass = shellVersion <= 46 ? Clutter.Color : Cogl.Color;
+    return new ColorClass({
+        red: 255 - color.red,
+        green: 255 - color.green,
+        blue: 255 - color.blue,
+        alpha: color.alpha,
+    });
+}
+
 export function adjustOpacityToRgba(color, transparency) {
     const alpha = Math.max(0, Math.min(1, transparency)).toFixed(2);
     return `rgba(${color.red}, ${color.green}, ${color.blue}, ${alpha})`;
@@ -135,7 +156,14 @@ export function setSourceColor(cr, sourceColor) {
 }
 
 export function getInkBounds(filePath, svgSize) {
-    const handle = Rsvg.Handle.new_from_file(filePath);
+    let handle;
+
+    try {
+        handle = Rsvg.Handle.new_from_file(filePath);
+    } catch {
+        console.error(`Failed to load SVG: ${filePath}`);
+        return null;
+    }
 
     const intrinsic = handle.get_intrinsic_size_in_pixels();
     if (!Array.isArray(intrinsic) || intrinsic.length < 3 ||

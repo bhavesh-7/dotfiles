@@ -4,9 +4,10 @@
   "name": "Dim Completed Calendar Events",
   "shell-version": [
     "47",
-    "48"
+    "48",
+    "49"
   ],
   "url": "https://github.com/marcinjahn/gnome-dim-completed-calendar-events-extension",
   "uuid": "dim-completed-calendar-events@marcinjahn.com",
-  "version": 10
+  "version": 11
 }

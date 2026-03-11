@@ -15,15 +15,14 @@ export const MediaController = GObject.registerClass({
         ),
     },
 }, class MediaController extends GObject.Object {
-    _init(settings, devicePath, inEarControl, caVolume, previousOnDestroyVolume) {
+    _init(settings, devicePath, previousOnDestroyVolume) {
         super._init();
         this._settings = settings;
         this._devicePath = devicePath;
         const indexMacAddress = devicePath.indexOf('dev_') + 4;
         this._macAddress = devicePath.substring(indexMacAddress);
 
-        this._controllerReady = true;
-        this._caVolume = caVolume;
+        this._controllerReady = false;
         this._previousVolume = previousOnDestroyVolume;
         this._sink = null;
         this._defaultSinkChangedId = null;
@@ -31,7 +30,6 @@ export const MediaController = GObject.registerClass({
         this._volumeId = null;
         this._muteId = null;
 
-        this._inEarControl = inEarControl;
         this._mprisNames = null;
         this._lastPausedPlayer = null;
         this._playbackStatusChangePending = false;
@@ -65,9 +63,6 @@ export const MediaController = GObject.registerClass({
     }
 
     _initializeSink(sink) {
-        this.output_is_a2dp = true;
-        this.notify('output-is-a2dp');
-
         if (this._sink === sink)
             return;
 
@@ -174,14 +169,14 @@ export const MediaController = GObject.registerClass({
             this._control.disconnect(this._defaultSinkChangedId);
     }
 
-    updateConfig(inEarControl, caVolume) {
-        this._inEarControl = inEarControl;
-        this._caVolume = caVolume;
-    }
-
-    lowerAirpodsVolume(attenuated) {
+    setConversationAwarenessVolume(attenuated, caVolume) {
         if (!this._controllerReady || !this._sink || !this._sinkStateIsRunning || this._sinkIsMuted)
             return;
+
+        if (this._attenuated === attenuated)
+            return;
+
+        this._attenuated = attenuated;
 
         if (attenuated && this._previousVolume >= 0)
             return;
@@ -199,11 +194,9 @@ export const MediaController = GObject.registerClass({
             GLib.source_remove(this._volumeRampTimeoutId);
         this._volumeRampTimeoutId = null;
 
-        this._unmonitorSinkVolume();
-
         if (attenuated) {
             const maxVolume = this._control.get_vol_max_norm();
-            const fadeOutTargetVolume = Math.floor(this._caVolume * maxVolume);
+            const fadeOutTargetVolume = Math.floor(caVolume * maxVolume / 100);
             const currentVolume = this._sink.volume;
 
             if (currentVolume <= fadeOutTargetVolume)
@@ -214,6 +207,8 @@ export const MediaController = GObject.registerClass({
             const steps = 50;
             const interval = duration / steps;
             let step = 0;
+
+            this._unmonitorSinkVolume();
 
             this._volumeRampTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
                 if (step >= steps) {
@@ -242,6 +237,8 @@ export const MediaController = GObject.registerClass({
             const steps = 50;
             const interval = duration / steps;
             let step = 0;
+
+            this._unmonitorSinkVolume();
 
             this._volumeRampTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, interval, () => {
                 if (step >= steps) {
@@ -361,10 +358,10 @@ export const MediaController = GObject.registerClass({
     }
 
     async changeActivePlayerState(requestedState) {
-        if (!this._inEarControl)
+        if (!this._controllerReady || !this._sink)
             return;
 
-        if (!this._controllerReady || !this._sink || !this._sinkStateIsRunning)
+        if (requestedState === 'pause' && !this._sinkStateIsRunning)
             return;
 
         this._requestedState = requestedState;
@@ -401,7 +398,7 @@ export const MediaController = GObject.registerClass({
     }
 
     _onDestroy() {
-        if (this._previousVolume !== null) {
+        if (this._previousVolume > -1) {
             const lastAttenuationInfo = {
                 path: this._devicePath,
                 timestamp: Date.now(),

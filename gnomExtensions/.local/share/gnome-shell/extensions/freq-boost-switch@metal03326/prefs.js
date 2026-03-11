@@ -227,6 +227,8 @@ export default class FrequencyBoostSwitchPreferences extends ExtensionPreference
 			{
 				const path = this.getPolkitRulesPath();
 
+				console.log( path );
+
 				pkexecCommand( active ? `cp ${this.dir.get_child( 'freq-boost-switch.rules' ).get_path()} ${path}/` : `rm -f ${path}/freq-boost-switch.rules`, true )
 					.then( _ => this.settings.set_boolean( 'polkit-rules', active ) )
 					.catch( _ => freqBoostPolkitSwitch.set_active( !active ) );

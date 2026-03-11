@@ -17,6 +17,7 @@ import GLib from 'gi://GLib';
 import Gettext from 'gettext';
 
 import * as Airpods from '../preferences/devices/airpods/configureWindow.js';
+import * as Sony from '../preferences/devices/sony/configureWindow.js';
 
 Gio._promisify(Gio.DBusProxy, 'new');
 Gio._promisify(Gio.DBusProxy.prototype, 'call');
@@ -56,6 +57,9 @@ class MoreSettingsLauncher {
         if (this._deviceType === 'airpods') {
             this._prefsType = Airpods;
             this._schemaKey = 'airpods-list';
+        } else if (this._deviceType === 'sony') {
+            this._prefsType = Sony;
+            this._schemaKey = 'sony-list';
         }
     }
 
@@ -164,6 +168,12 @@ class MoreSettingsLauncher {
         return new Gio.Settings({settings_schema: schemaObj});
     }
 
+    _pathToMacAddress(path) {
+        const indexMacAddress = path.indexOf('dev_') + 4;
+        const macAddress = path.substring(indexMacAddress);
+        return macAddress.replace(/_/g, ':');
+    }
+
     _onActivate() {
         const scriptDir = GLib.path_get_dirname(import.meta.url.replace('file://', ''));
         const extDir = GLib.path_get_dirname(scriptDir);
@@ -171,8 +181,7 @@ class MoreSettingsLauncher {
         this._loadIconDir(extDir);
         const _ = this._setupGettext(extDir);
 
-        const indexMacAddress = this._devicePath.indexOf('dev_') + 4;
-        const macAddress = this._devicePath.substring(indexMacAddress);
+        const macAddress = this._pathToMacAddress(this._devicePath);
         this._win = new this._prefsType.ConfigureWindow(this._settings, macAddress,
             this._devicePath, null, _);
         this._win.set_application(this._app);

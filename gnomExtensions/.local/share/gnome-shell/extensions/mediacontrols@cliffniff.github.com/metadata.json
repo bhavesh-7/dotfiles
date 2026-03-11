@@ -5,10 +5,13 @@
   "name": "Media Controls",
   "settings-schema": "org.gnome.shell.extensions.mediacontrols",
   "shell-version": [
-    "48"
+    "46",
+    "47",
+    "48",
+    "49"
   ],
   "url": "https://github.com/cliffniff/media-controls",
   "uuid": "mediacontrols@cliffniff.github.com",
-  "version": 40,
-  "version-name": "2.2.0"
+  "version": 47,
+  "version-name": "2.4.4"
 }

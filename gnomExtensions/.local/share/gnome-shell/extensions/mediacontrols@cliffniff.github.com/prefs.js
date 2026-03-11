@@ -11,7 +11,7 @@ import ElementListOrig from "./helpers/prefs/ElementList.js";
 import LabelListOrig from "./helpers/prefs/LabelList.js";
 import AppChooserorig from "./helpers/prefs/AppChooser.js";
 import { isValidBinding, isValidAccelerator } from "./utils/prefs_only.js";
-import { handleError } from "./utils/common.js";
+import { errorLog } from "./utils/common.js";
 
 /** @type {typeof BlacklistedPlayersOrig} */
 export let BlacklistedPlayers;
@@ -262,6 +262,8 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
         this.bindSetting("label-width", "sr-general-label-width", "value");
         this.bindSetting("fixed-label-width", "sr-general-label-fixed", "active");
         this.bindSetting("scroll-labels", "sr-general-scroll-labels", "active");
+        this.bindSetting("scroll-speed", "sr-general-scroll-speed", "value");
+        this.bindSetting("scroll-pause-time", "sr-general-scroll-pause-time", "value");
         this.bindSetting("hide-media-notification", "sr-general-hide-media-notification", "active");
         this.bindSetting("show-track-slider", "sr-general-show-track-slider", "active");
         this.bindSetting("show-label", "sr-panel-show-label", "active");
@@ -337,7 +339,7 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
         const cacheDir = GLib.build_pathv("/", [GLib.get_user_cache_dir(), "mediacontrols@cliffniff.github.com"]);
         if (GLib.file_test(cacheDir, GLib.FileTest.EXISTS)) {
             const folder = Gio.File.new_for_path(cacheDir);
-            const success = await folder.trash_async(null, null).catch(handleError);
+            const success = await folder.trash_async(null, null).catch(errorLog);
             if (success) {
                 this.sendToast(_("Cache cleared successfully!"));
             } else {
@@ -356,14 +358,14 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
             const folder = Gio.File.new_for_path(cacheDir);
             const enumerator = await folder
                 .enumerate_children_async("standard::*", Gio.FileQueryInfoFlags.NONE, 0, null)
-                .catch(handleError);
+                .catch(errorLog);
             if (enumerator == null) {
                 return 0;
             }
             let size = 0;
             let retries = 0;
             while (true) {
-                const fileInfos = await enumerator.next_files_async(10, null, null).catch(handleError);
+                const fileInfos = await enumerator.next_files_async(10, null, null).catch(errorLog);
                 if (fileInfos == null) {
                     if (retries < 3) {
                         retries++;
@@ -379,7 +381,7 @@ export default class MediaControlsPreferences extends ExtensionPreferences {
                     const file = enumerator.get_child(fileInfo);
                     const info = await file
                         .query_info_async("standard::size", Gio.FileQueryInfoFlags.NONE, 0, null)
-                        .catch(handleError);
+                        .catch(errorLog);
                     const fileSize = info?.get_size() ?? 0;
                     size += fileSize;
                 }

@@ -2,7 +2,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-const LOG_BYTES = true;
+const LOG_INFO = false;
+const LOG_BYTES = false;
 
 const LOG_DIR = GLib.build_filenamev([GLib.get_tmp_dir(), 'bluetooth_battery_meter']);
 export const LOG_PATH = `${LOG_DIR}/service.log`;
@@ -24,6 +25,7 @@ function enforceLogSizeLimit() {
             logFile.move(historyFile, Gio.FileCopyFlags.OVERWRITE, null, null);
         }
     } catch {
+        // Do nothing
     }
 }
 
@@ -39,7 +41,9 @@ function WriteLogLine(prefix, msg) {
 
 export function createLogger(tag) {
     return {
-        info: (...args) => WriteLogLine('INF', `[${tag}] ${args.join(' ')}`),
+        info: LOG_INFO
+            ? (...args) => WriteLogLine('INF', `[${tag}] ${args.join(' ')}`)
+            : () => {},
         error: (err, msg = '') => {
             const text = `${msg} ${err instanceof Error ? err.stack : String(err)}`.trim();
             WriteLogLine('ERR', `[${tag}] ${text}`);

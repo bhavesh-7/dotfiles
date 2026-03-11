@@ -23,12 +23,6 @@ export const SliderBin = GObject.registerClass({
 
         const config = dataHandler.getConfig();
 
-        const menuSeparator = new St.Widget({
-            style_class: 'bbm-option-menu-separator',
-            x_align: Clutter.ActorAlign.CENTER,
-        });
-        this.add_child(menuSeparator);
-
         const sliderLabel = new St.Label({
             x_expand: true,
             style_class: 'bbm-subtitle-label',
@@ -66,7 +60,7 @@ export const SliderBin = GObject.registerClass({
         const sliderAccessible = slider.get_accessible();
         sliderAccessible.set_parent(sliderBin.get_parent().get_accessible());
         sliderBin.set_accessible(sliderAccessible);
-        sliderBin.connect('event', (bin, event) => slider.event(event, false));
+        sliderBin.connectObject('event', (bin, event) => slider.event(event, false), this);
         slider.accessible_name = sliderLabel.text;
 
         slider.value = dataHandler.props[`box${id}SliderValue`] / 100;
@@ -74,6 +68,12 @@ export const SliderBin = GObject.registerClass({
         slider.connectObject(
             'notify::value', () => {
                 dataHandler.emitUIAction(`box${id}SliderValue`, slider.value * 100);
+            },
+            'drag-begin', () => {
+                dataHandler.emitUIAction(`box${id}SliderIsDragging`, 1);
+            },
+            'drag-end', () => {
+                dataHandler.emitUIAction(`box${id}SliderIsDragging`, 0);
             },
             this
         );

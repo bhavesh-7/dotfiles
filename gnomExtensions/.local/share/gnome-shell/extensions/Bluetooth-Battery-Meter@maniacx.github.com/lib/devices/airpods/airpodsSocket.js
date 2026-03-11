@@ -4,6 +4,7 @@ import GObject from 'gi://GObject';
 
 import {createLogger} from '../logger.js';
 import {SocketHandler} from '../socketByProfile.js';
+import {isValidByte} from '../deviceUtils.js';
 import {
     PacketConstants, BatteryType, BatteryChargingStatus, EarDetection, ANCMode, AwarenessMode,
     PressSpeedMode, PressDurationMode, VolSwipeLength, VolSwipeMode
@@ -24,12 +25,12 @@ kavishdevar for Conversation awarness and AAP Definations
 export const AirpodsSocket = GObject.registerClass({
     GTypeName: 'BluetoothBatteryMeter_AirpodsSocket',
 }, class AirpodsSocket extends SocketHandler {
-    _init(devicePath, fd, modelData, callbacks) {
-        super._init(devicePath, fd);
-        const identifier = devicePath.split('_').slice(-3).join('');
-        const tag = `AirpodsDevice-${identifier}`;
+    _init(devicePath, profileManager, profile, modelData, callbacks) {
+        super._init(devicePath, profileManager, profile);
+        const identifier = devicePath.slice(-2);
+        const tag = `AirpodsSocket-${identifier}`;
         this._log = createLogger(tag);
-        this._log.info('AirpodsDevice init');
+        this._log.info('AirpodsSocket init');
 
         this._ancSupported = modelData.ancSupported ?? false;
         this._adaptiveSupported = modelData.adaptiveSupported ?? false;
@@ -47,7 +48,7 @@ export const AirpodsSocket = GObject.registerClass({
         this._bud1State = EarDetection.IN_CASE;
         this._bud2State = EarDetection.IN_CASE;
 
-        this.startSocket(fd);
+        this.startSocket();
     }
 
     async postConnectInitialization() {
@@ -196,7 +197,7 @@ export const AirpodsSocket = GObject.registerClass({
     _parseAncStatus(data) {
         const ancModeByte = data[7];
 
-        if (!Object.values(ANCMode).includes(ancModeByte))
+        if (!isValidByte(ancModeByte, ANCMode))
             return;
 
         if (this._ancMode !== ancModeByte) {
@@ -224,7 +225,7 @@ export const AirpodsSocket = GObject.registerClass({
     _parseAwarenessStatus(data) {
         const awarenessModeByte = data[7];
 
-        if (!Object.values(AwarenessMode).includes(awarenessModeByte))
+        if (!isValidByte(awarenessModeByte, AwarenessMode))
             return;
 
         if (this._awarenessMode !== awarenessModeByte) {
@@ -286,7 +287,7 @@ export const AirpodsSocket = GObject.registerClass({
 
     _parseVolSwipeMode(data) {
         const mode = data[9];
-        if (Object.values(VolSwipeMode).includes(mode)) {
+        if (isValidByte(mode, VolSwipeMode)) {
             const state = mode === VolSwipeMode.ON;
             if (this._callbacks?.updateVolSwipeMode)
                 this._callbacks.updateVolSwipeMode(state);
@@ -295,7 +296,7 @@ export const AirpodsSocket = GObject.registerClass({
 
     _parseVolSwipeLength(data) {
         const duration = data[9];
-        if (Object.values(VolSwipeLength).includes(duration)) {
+        if (isValidByte(duration, VolSwipeLength)) {
             if (this._callbacks?.updateVolSwipeLength)
                 this._callbacks.updateVolSwipeLength(duration);
         }
@@ -303,7 +304,7 @@ export const AirpodsSocket = GObject.registerClass({
 
     _parsePressSpeed(data) {
         const speed = data[9];
-        if (Object.values(PressSpeedMode).includes(speed)) {
+        if (isValidByte(speed, PressSpeedMode)) {
             if (this._callbacks?.updatePressSpeed)
                 this._callbacks.updatePressSpeed(speed);
         }
@@ -311,7 +312,7 @@ export const AirpodsSocket = GObject.registerClass({
 
     _parsePressDuration(data) {
         const duration = data[9];
-        if (Object.values(PressDurationMode).includes(duration)) {
+        if (isValidByte(duration, PressDurationMode)) {
             if (this._callbacks?.updatePressDuration)
                 this._callbacks.updatePressDuration(duration);
         }
@@ -345,6 +346,16 @@ export const AirpodsSocket = GObject.registerClass({
 
         if (this._callbacks?.updateAwarenessMode)
             this._callbacks.updateAwarenessMode(mode);
+    }
+
+    setListMode(lisMode) {
+        const listModeByte = lisMode ? 0x01 : 0x02;
+        const lisModePacket = Uint8Array.from([
+            ...PacketConstants.LISTENING_MODE_HEADER,
+            listModeByte,
+            ...PacketConstants.SUFFIX,
+        ]);
+        this.sendMessage(lisModePacket);
     }
 
     setLongpressCycle(cyclicValue) {
@@ -406,6 +417,10 @@ export const AirpodsSocket = GObject.registerClass({
     }
 
     destroy() {
+        if (this._airpodsSocketDestroyed)
+            return;
+        this._airpodsSocketDestroyed = true;
+
         if (this._delayReadTimeoutId)
             GLib.source_remove(this._delayReadTimeoutId);
         this._delayReadTimeoutId = null;

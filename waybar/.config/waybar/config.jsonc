@@ -12,7 +12,6 @@
     "power-profiles-daemon",
     "battery",
     "clock",
-    "custom/power",
   ],
   "clock": {
     "format": "<span >   </span>{:%a %d %H:%M}",

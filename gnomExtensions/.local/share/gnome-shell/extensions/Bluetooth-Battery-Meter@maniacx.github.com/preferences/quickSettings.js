@@ -13,12 +13,10 @@ export const  QuickSettings = GObject.registerClass({
     ),
     InternalChildren: [
         'row_note_experimental_features',
+        'modify_quicksettings',
         'use_popup_in_quicksettings',
-        'enable_battery_level_icon_row',
         'enable_battery_level_icon',
-        'enable_battery_level_text_row',
         'enable_battery_level_text',
-        'swap_icon_text_row',
         'swap_icon_text',
         'sort_devices_by_history',
     ],
@@ -26,6 +24,12 @@ export const  QuickSettings = GObject.registerClass({
     constructor(settings) {
         super({});
         this._settings = settings;
+        this._settings.bind(
+            'modify-quick-settings',
+            this._modify_quicksettings,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
         this._settings.bind(
             'popup-in-quick-settings',
             this._use_popup_in_quicksettings,
@@ -70,17 +74,31 @@ export const  QuickSettings = GObject.registerClass({
 
         this._popupEnableRowVisibility();
 
+        this._settings.connect('changed::modify-quick-settings', () => {
+            this._popupEnableRowVisibility();
+        });
+
         this._settings.connect('changed::popup-in-quick-settings', () => {
             this._popupEnableRowVisibility();
         });
     }
 
     _popupEnableRowVisibility() {
-        const state = this._settings.get_boolean('popup-in-quick-settings');
-        this._enable_battery_level_icon_row.visible = !state;
-        this._enable_battery_level_text_row.visible = !state;
-        this._swap_icon_text_row.visible = !state;
+        const modify = this._settings.get_boolean('modify-quick-settings');
+        this._use_popup_in_quicksettings.visible = modify;
+        if (!modify) {
+            this._enable_battery_level_icon.visible = false;
+            this._enable_battery_level_text.visible = false;
+            this._swap_icon_text.visible = false;
+            return;
+        }
+
+        const popup = this._settings.get_boolean('popup-in-quick-settings');
+        this._enable_battery_level_icon.visible = !popup;
+        this._enable_battery_level_text.visible = !popup;
+        this._swap_icon_text.visible = !popup;
     }
+
 
     _setRowSensitivity() {
         const state = this._settings.get_boolean('popup-in-quick-settings');
@@ -89,7 +107,7 @@ export const  QuickSettings = GObject.registerClass({
         const status =
             this._settings.get_boolean('enable-battery-level-text') &&
             this._settings.get_boolean('enable-battery-level-icon');
-        this._swap_icon_text_row.sensitive = status;
+        this._swap_icon_text.sensitive = status;
         if (!status)
             this._settings.set_boolean('swap-icon-text', false);
     }

@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 
 import {BluetoothIndicator} from './widgets/bluetoothIndicator.js';
+import {BluetoothGnomePopupMenuItem} from './widgets/bluetoothGnomePopupMenu.js';
 import {BluetoothPopupMenuItem} from './widgets/bluetoothPopupMenu.js';
 import {BluetoothPopupSubMenuItem} from './widgets/bluetoothPopupSubMenu.js';
 import {OnHoverMenu} from './widgets/onHoverMenu.js';
@@ -25,22 +26,25 @@ export const WidgetManagerBluez = GObject.registerClass({
         this.alias = device.alias;
         this.gIcon = toggle.gIcon;
         this.widgetInfo = toggle.widgetInfo;
-        this.isUnlockSession = toggle.isUnlockSession;
+        this.isUnlockSession = this.widgetInfo.isUnlockSession;
         this.hoverModeEnabled = toggle.hoverModeEnabled;
         this.batteryReported = batteryReported;
         this.qsLevelEnabled = qsLevelEnabled;
         this.indicatorMode = indicatorMode;
         this._client = toggle._bluetoothToggle._client;
+        this._config = createConfig();
+        this._props = createProperties();
 
         this._checkLateBluezBatteryReporting();
 
-        if (this.toggle.usePopupInQuickSettings) {
-            this.popupMenuItem =
-                new BluetoothPopupSubMenuItem(this);
-        } else {
-            this.popupMenuItem =
-                new BluetoothPopupMenuItem(this);
-        }
+        if (!this.toggle.modifyQuickSettings)
+            this.popupMenuItem = new BluetoothGnomePopupMenuItem(this);
+        else if (this.toggle.usePopupInQuickSettings)
+            this.popupMenuItem = new BluetoothPopupSubMenuItem(this);
+        else
+            this.popupMenuItem = new BluetoothPopupMenuItem(this);
+
+
 
 
         this.device.connectObject(
@@ -68,6 +72,7 @@ export const WidgetManagerBluez = GObject.registerClass({
                         ...props, batteryReported: true,
                         qsLevelEnabled: true, indicatorMode: 2,
                     });
+                    this.batteryReported = true;
                     this.toggle.pushDevicesToGsetting();
                 }
                 this._updateDataHandler();
@@ -79,20 +84,18 @@ export const WidgetManagerBluez = GObject.registerClass({
 
     _updateDataHandler() {
         if (!this._dataHandler && this.device.battery_percentage > 0) {
-            this._dconfig = createConfig();
-            this._dprops = createProperties();
-            this._dconfig.battery1Icon = this.deviceIcon;
-            this._dconfig.commonIcon = this.deviceIcon;
-            this._dconfig.albumArtIcon = this.deviceIcon;
-            this._dprops.computedBatteryLevel = this.batteryPercentage;
-            this._dprops.battery1Level = this.batteryPercentage;
-            this._dataHandler = new DataHandler(this._dconfig, this._dprops);
+            this._config.battery1Icon = this.deviceIcon;
+            this._config.commonIcon = this.deviceIcon;
+            this._config.albumArtIcon = this.deviceIcon;
+            this._props.computedBatteryLevel = this.batteryPercentage;
+            this._props.battery1Level = this.batteryPercentage;
+            this._dataHandler = new DataHandler(this._config, this._props);
             this.popupMenuItem?.setDataHandler?.(this._dataHandler);
             this._updateUI();
         } else if (this.device.battery_percentage > 0) {
-            this._dprops.computedBatteryLevel = this.batteryPercentage;
-            this._dprops.battery1Level = this.batteryPercentage;
-            this._dataHandler?.setProps(this._dprops);
+            this._props.computedBatteryLevel = this.batteryPercentage;
+            this._props.battery1Level = this.batteryPercentage;
+            this._dataHandler?.setProps(this._props);
         }
         this._updateUI();
     }
@@ -108,10 +111,10 @@ export const WidgetManagerBluez = GObject.registerClass({
             }
             if (this.deviceIcon !== props.icon) {
                 this.deviceIcon = props.icon;
-                this._dconfig.battery1Icon = this.deviceIcon;
-                this._dconfig.commonIcon = this.deviceIcon;
-                this._dconfig.albumArtIcon = this.deviceIcon;
-                this._dataHandler?.setConfig(this._dconfig);
+                this._config.battery1Icon = this.deviceIcon;
+                this._config.commonIcon = this.deviceIcon;
+                this._config.albumArtIcon = this.deviceIcon;
+                this._dataHandler?.setConfig(this._config);
                 qsPropsUpdated = true;
                 indicatorPropsUpdated = true;
             }
@@ -141,12 +144,17 @@ export const WidgetManagerBluez = GObject.registerClass({
     }
 
     _updateUI() {
-        if (this._dataHandler && this.device.connected) {
+        if (!this.device.connected)
+            return;
+
+        if (this._dataHandler) {
             if (this.toggle.panelButton && !this.isUnlockSession && !this._popupMenuWidgetItem) {
                 this._popupMenuWidgetItem =
                     this.toggle.panelButton.addDevice(this.path, this.alias, this._dataHandler);
             }
 
+            this._startIndicator();
+        } else if (this.toggle.enableIndicator && this.indicatorMode === 1) {
             this._startIndicator();
         }
     }
@@ -161,10 +169,14 @@ export const WidgetManagerBluez = GObject.registerClass({
         this.indicator = new BluetoothIndicator(this);
         this.toggle.addIndicatorWidget(this.indicator);
 
-        if (this.hoverModeEnabled && !this.isUnlockSession && !this._onHoverMenu) {
-            this._onHoverMenu = new OnHoverMenu(this.indicator, this.settings, this.gIcon,
-                this.path, this.alias, this.widgetInfo, this._dataHandler);
-        }
+        if (!this.hoverModeEnabled || this._onHoverMenu)
+            return;
+
+        if (this.isUnlockSession || this.indicatorMode !== 2)
+            return;
+
+        this._onHoverMenu = new OnHoverMenu(this.indicator, this.settings, this.gIcon,
+            this.path, this.alias, this.widgetInfo, this._dataHandler);
     }
 
     _recordTimeEvent() {

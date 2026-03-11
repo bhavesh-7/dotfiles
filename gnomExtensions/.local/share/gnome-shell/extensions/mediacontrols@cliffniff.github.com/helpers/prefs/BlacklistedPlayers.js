@@ -4,7 +4,7 @@ import Gtk from "gi://Gtk";
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 
 import { AppChooser } from "../../prefs.js";
-import { handleError } from "../../utils/common.js";
+import { errorLog } from "../../utils/common.js";
 
 class BlacklistedPlayers extends Adw.PreferencesGroup {
     /**
@@ -42,7 +42,7 @@ class BlacklistedPlayers extends Adw.PreferencesGroup {
         this.appChooser = this._app_chooser;
         this.appChooser = new AppChooser();
         this.addBtn.connect("clicked", async () => {
-            const appId = await this.appChooser.showChooser().catch(handleError);
+            const appId = await this.appChooser.showChooser().catch(errorLog);
             if (appId == null) return;
             this.players.unshift(appId);
             this.notify("players");
@@ -82,6 +82,9 @@ class BlacklistedPlayers extends Adw.PreferencesGroup {
         for (const player of this.players) {
             const row = new Adw.ActionRow();
             const app = apps.find((app) => app.get_id() === player);
+            if (!app) {
+                continue;
+            }
             row.title = app.get_display_name();
             const icon = new Gtk.Image({ gicon: app.get_icon(), iconSize: Gtk.IconSize.LARGE });
             row.add_prefix(icon);

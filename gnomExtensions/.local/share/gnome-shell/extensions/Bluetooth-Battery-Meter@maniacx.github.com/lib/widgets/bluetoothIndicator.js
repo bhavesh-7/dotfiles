@@ -58,19 +58,24 @@ export const BluetoothIndicator = GObject.registerClass({
         this._indicator.connectObject('notify::visible', () =>
             this._syncIndicatorsVisible(), this);
 
-        const themeNode = this._indicator.peek_theme_node();
-        if (themeNode === null) {
+        this._levelWidget = new IndicatorIconWidget(this._settings, this._indicator,
+            this._indicatorMode, this._deviceIcon, this._widgetInfo);
+
+        this._indicator.set_child(this._levelWidget);
+
+        const themenode = this._indicator.peek_theme_node();
+        if (themenode === null) {
             this._indicatorStyleChangeId = this._indicator.connect('style-changed', () => {
-                const isStaged = this._indicator.get_stage();
-                if (isStaged) {
+                const node = this._indicator.peek_theme_node();
+                if (node !== null) {
                     if (this._indicatorStyleChangeId)
                         this._indicator.disconnect(this._indicatorStyleChangeId);
                     this._indicatorStyleChangeId = null;
-                    this._getWidgetSize(this._indicator.peek_theme_node());
+                    this._getWidgetSize(node);
                 }
             });
         } else {
-            this._getWidgetSize(themeNode);
+            this._getWidgetSize(themenode);
         }
 
         this.connectObject(
@@ -82,18 +87,7 @@ export const BluetoothIndicator = GObject.registerClass({
             },
             this
         );
-    }
 
-    _getWidgetSize(themeNode) {
-        const [found, iconSize] = themeNode.lookup_length('icon-size', false);
-        if (found)
-            this._addLevelWidget(iconSize);
-    }
-
-    _addLevelWidget(iconSize) {
-        this._levelWidget = new IndicatorIconWidget(this._settings, this._indicator,
-            iconSize, this._indicatorMode, this._deviceIcon, this._widgetInfo);
-        this._indicator.set_child(this._levelWidget);
 
         if (this._indicatorMode === 1) {
             this._indicator.visible = true;
@@ -115,6 +109,12 @@ export const BluetoothIndicator = GObject.registerClass({
 
         if (this._indicatorWithText && this._indicatorMode === 2)
             this._addTextToIndicator();
+    }
+
+    _getWidgetSize(themeNode) {
+        const [found, iconSize] = themeNode.lookup_length('icon-size', false);
+        if (found)
+            this._levelWidget.setIconSize(iconSize);
     }
 
     _addTextToIndicator() {

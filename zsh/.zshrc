@@ -167,3 +167,10 @@ cddir() {
   fi
   mkdir -p "$1" && cd "$1"
 }
+
+# bun completions
+[ -s "/home/bhavesh/.bun/_bun" ] && source "/home/bhavesh/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

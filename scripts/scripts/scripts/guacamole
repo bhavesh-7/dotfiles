@@ -1,0 +1,45 @@
+#!/bin/bash
+
+loading() {
+    for i in {1..5}; do echo -n "."; sleep 1; done
+    echo
+}
+
+if [[ "$1" == "stop" ]]; then
+    echo "Stopping services..."
+    systemctl --user stop wayvnc 2>/dev/null
+    sleep 2
+    docker compose -f /home/bhavesh/docker/guacamole/docker-compose.yml down
+    sleep 10
+    sudo systemctl stop cloudflared
+    sleep 3
+    sudo systemctl stop docker.socket docker
+    sleep 2
+    echo "Services stopped"
+    exit 0
+fi
+
+echo "----------------------------------------------------------------"
+echo
+echo -n "Starting Docker"
+sudo systemctl start docker
+loading
+echo -n "Docker Daemon Status: $(systemctl is-active docker)"
+echo
+echo -n "Starting Cloudflare Tunnel"
+sudo systemctl start cloudflared
+loading
+echo -n "Cloudflare Tunnel Status: $(systemctl is-active cloudflared)"
+echo
+echo -n "Starting Guacamole"
+docker compose -f /home/bhavesh/docker/guacamole/docker-compose.yml up -d
+echo
+read -p "Turn on vnc server? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    echo "Starting VNC Server"
+    systemctl --user start wayvnc
+else
+    echo "VNC Server not started"
+fi

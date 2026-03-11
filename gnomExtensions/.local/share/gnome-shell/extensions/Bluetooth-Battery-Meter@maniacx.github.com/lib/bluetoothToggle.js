@@ -4,7 +4,6 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
-import * as Config from 'resource:///org/gnome/shell/misc/config.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {ngettext} from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -14,12 +13,12 @@ import {WidgetManagerEnhanced} from './widgetManagerEnhanced.js';
 import {PanelButtonSingleDevice} from './panelButtonSingleDevice.js';
 import {PanelButtonMultiDevice} from './panelButtonMultiDevice.js';
 import {UpowerClient} from './upower/upowerDevice.js';
-import {supportedIcons} from './widgets/indicatorVectorImages.js';
-import {isDarkMode, adjustColorLuminanceToRgba} from './widgets/colorHelpers.js';
+import {supportedIcons} from './widgets/iconGroups.js';
+import {
+    isDarkMode, adjustColorLuminanceToRgba, getAccentColor, hexToColor
+} from './widgets/colorHelpers.js';
 
 const QuickSettingsMenu = Main.panel.statusArea.quickSettings;
-const [major] = Config.PACKAGE_VERSION.split('.');
-const shellVersion = Number.parseInt(major);
 
 export const BluetoothBatteryMeter = GObject.registerClass({
     GTypeName: 'BluetoothBatteryMeter_BluetoothToggle',
@@ -49,12 +48,12 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         this._syncPending = false;
         this._deviceItems = new Map();
         this.deviceList = new Map();
-        this._colorsAssigned = false;
         this.connectedColor = '#8fbbf0';
         this._indicatorBox = null;
         this._pullDevicesFromGsetting();
         this.gIcon = iconName => Gio.icon_new_for_string(
             `${this.extPath}/icons/hicolor/scalable/actions/${iconName}`);
+        this.modifyQuickSettings = this.settings.get_boolean('modify-quick-settings');
         this.usePopupInQuickSettings = this.settings.get_boolean('popup-in-quick-settings');
         this.showBatteryPercentage = this.settings.get_boolean('enable-battery-level-text');
         this.showBatteryIcon = this.settings.get_boolean('enable-battery-level-icon');
@@ -66,9 +65,9 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         this._enableMultimodeIndicator = this.settings.get_boolean('enable-multi-indicator-mode');
         this._enableHoverMode = this.settings.get_boolean('enable-on-hover-mode');
 
-        this.isUnlockSession = Main.sessionMode.currentMode === 'unlock-dialog';
         this.widgetInfo = {
             extPath: this.extPath,
+            isUnlockSession: Main.sessionMode.currentMode === 'unlock-dialog',
             disableLevelInIcon: this.settings.get_boolean('disable-level-in-icon'),
             indicatorWithText: this.settings.get_boolean('enable-battery-indicator-text'),
             levelIndicatorType: this.settings.get_int('level-indicator-type'),
@@ -77,10 +76,14 @@ export const BluetoothBatteryMeter = GObject.registerClass({
             levelIndicatorCustomColors: this.settings.get_strv('level-indicator-custom-colors'),
             circleWidgetColor: this.settings.get_int('circle-widget-color'),
             circleWidgetCustomColors: this.settings.get_strv('circle-widget-custom-colors'),
+            accentColor: hexToColor('#3584e4'),
         };
 
         this.airpodsEnabled = this.settings.get_boolean('enable-airpods-device');
+        this.sonyEnabled = this.settings.get_boolean('enable-sony-device');
         this.gattBasEnabled = this.settings.get_boolean('enable-gattbas-device');
+
+        this._updateColors();
 
         this._originalSync = this._bluetoothToggle._sync;
         this._bluetoothToggle._sync = () => {};
@@ -110,11 +113,16 @@ export const BluetoothBatteryMeter = GObject.registerClass({
 
         this._themeContext = St.ThemeContext.get_for_stage(global.stage);
         this._themeContext.connectObject('changed', () => {
-            this._colorsAssigned = false;
+            this._updateColors();
             this._onActiveChanged();
         }, this);
 
         this.settings.connectObject(
+            'changed::modify-quick-settings', () => {
+                this.modifyQuickSettings =
+                    this.settings.get_boolean('modify-quick-settings');
+                this._onActiveChanged();
+            },
             'changed::popup-in-quick-settings', () => {
                 this.usePopupInQuickSettings =
                     this.settings.get_boolean('popup-in-quick-settings');
@@ -159,6 +167,10 @@ export const BluetoothBatteryMeter = GObject.registerClass({
             },
             'changed::enable-on-hover-mode', () => {
                 this._enableHoverMode = this.settings.get_boolean('enable-on-hover-mode');
+                this._onActiveChanged();
+                this._reloadUpowerIndicator();
+            },
+            'changed::enable-tooltip', () => {
                 this._onActiveChanged();
                 this._reloadUpowerIndicator();
             },
@@ -218,6 +230,11 @@ export const BluetoothBatteryMeter = GObject.registerClass({
                 this._setEnhancedDeviceMode();
                 this._onActiveChanged();
             },
+            'changed::enable-sony-device', () => {
+                this.sonyEnabled = this.settings.get_boolean('enable-sony-device');
+                this._setEnhancedDeviceMode();
+                this._onActiveChanged();
+            },
             'changed::enable-gattbas-device', () => {
                 this.gattBasEnabled = this.settings.get_boolean('enable-gattbas-device');
                 this._setEnhancedDeviceMode();
@@ -231,7 +248,7 @@ export const BluetoothBatteryMeter = GObject.registerClass({
 
         Main.sessionMode.connectObject(
             'updated', session => {
-                this.isUnlockSession = session.currentMode === 'unlock-dialog';
+                this.widgetInfo.isUnlockSession = session.currentMode === 'unlock-dialog';
                 this._onActiveChanged();
             },
             this
@@ -295,15 +312,11 @@ export const BluetoothBatteryMeter = GObject.registerClass({
     }
 
     _onActiveChanged() {
-        if (!this._colorsAssigned && this._bluetoothToggle.checked) {
-            this._getColor();
-        } else {
-            this._bluetoothToggle._updatePlaceholder();
-            this._deviceItems.forEach(item => item.destroy());
-            this._deviceItems.clear();
-            this._updateIndicatorSettings();
-            this.sync();
-        }
+        this._bluetoothToggle._updatePlaceholder();
+        this._deviceItems.forEach(item => item.destroy());
+        this._deviceItems.clear();
+        this._updateIndicatorSettings();
+        this.sync();
     }
 
     _getRecencySortedDevices() {
@@ -542,17 +555,16 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         });
         if (this._enablePanelButton && !this._panelSingleIndicator && this.panelButton) {
             this.panelButton.add_child(this._indicatorBox);
-        } else if (this._indicatorEnabled) {
+        } else if (this.enableIndicator) {
             this._indicatorBox.quickSettingsItems = [];
             Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicatorBox);
         }
-        const removedSignal = shellVersion > 45 ? 'child-removed' : 'actor-removed';
-        this._indicatorBox.connectObject(
-            removedSignal, () => {
-                if (this._indicatorBox.get_n_children() === 0)
-                    this._removeIndicatorBoxLayout();
-            },
-            this
+
+        this._indicatorBox.connectObject('child-removed', () => {
+            if (this._indicatorBox.get_n_children() === 0)
+                this._removeIndicatorBoxLayout();
+        },
+        this
         );
     }
 
@@ -571,24 +583,26 @@ export const BluetoothBatteryMeter = GObject.registerClass({
     _setEnhancedDeviceMode() {
         this.enhancedDeviceManager?.destroy();
         this.enhancedDeviceManager = null;
-        const enableEnhancedDeviceMode = this.airpodsEnabled || this.gattBasEnabled;
+        const enableEnhancedDeviceMode = this.airpodsEnabled || this.sonyEnabled ||
+                    this.gattBasEnabled;
+
         if (enableEnhancedDeviceMode && !this.enhancedDeviceManager)
             this.enhancedDeviceManager = new EnhancedDeviceSupportManager(this);
     }
 
     _updateIndicatorSettings() {
-        this._indicatorEnabled = this._indicatorType === 1;
+        this.enableIndicator = this._indicatorType === 1;
         this._enablePanelButton = this._indicatorType === 2;
         this.indicatorEnabled =
-                this._indicatorEnabled || this._enablePanelButton && !this._panelSingleIndicator;
+                this.enableIndicator || this._enablePanelButton && !this._panelSingleIndicator;
         this.multimodeIndicatorEnabled =
                 this.indicatorEnabled && this._enableMultimodeIndicator;
-        this.hoverModeEnabled = this._indicatorEnabled && this._enableHoverMode;
+        this.hoverModeEnabled = this.enableIndicator && this._enableHoverMode;
 
         this.panelButton?.destroy();
         this.panelButton = null;
 
-        if (!this.isUnlockSession && this._enablePanelButton && !this.panelButton) {
+        if (!this.widgetInfo.isUnlockSession && this._enablePanelButton && !this.panelButton) {
             if (this._panelSingleIndicator) {
                 this.panelButton = new PanelButtonSingleDevice(
                     this.settings, this.gIcon, this.widgetInfo);
@@ -600,18 +614,15 @@ export const BluetoothBatteryMeter = GObject.registerClass({
         }
     }
 
-    _getColor() {
-        const toggleButton = this._bluetoothToggle._box.get_first_child();
-        const accentColor = toggleButton.get_theme_node().get_background_color();
-        const panelBackgroundRGB = Main.panel.statusArea.quickSettings
-            .menu.box.get_theme_node().get_background_color();
-
+    _updateColors() {
+        const accentColor = getAccentColor();
+        const qsBox = Main.panel.statusArea.quickSettings.menu.box;
+        if (!qsBox)
+            return;
+        const panelBackgroundRGB = qsBox.get_theme_node().get_background_color();
         this.widgetInfo.accentColor = accentColor;
         const luminanceFactor = isDarkMode(panelBackgroundRGB) ? 15 : -5;
-
         this.connectedColor = adjustColorLuminanceToRgba(accentColor, luminanceFactor);
-        this._colorsAssigned = true;
-        this._onActiveChanged();
     }
 
     destroy() {

@@ -29,7 +29,9 @@ export function createConfig() {
     // box*RadioButton: Can have either 2 - 4 radio button per box.
     //                  Elements in array will be used as button name
     //                  example to define 2 radio button ['button name 1', 'button name2']
-    // box*RadioTitle;  Title for Radio Box
+    // box*RadioTitle:  Title for Radio Box
+    // labelIndicatorEnabled: No of Indicators on panel, displaying info. max 3.
+    // labelWidth: Adjust width depending on text (em).
 
     return {
         commonIcon: null,
@@ -83,6 +85,9 @@ export function createConfig() {
         toggle2Button4Icon: null,
         toggle2Button4Name: '',
 
+        labelWidth: 4,
+        labelIndicatorEnabled: 0,
+
         panelButtonLabelFixed: true,
         showSettingsButton: false,
     };
@@ -135,6 +140,10 @@ export function createProperties() {
         box3RadioButtonState: 0,
         box4RadioButtonState: 0,
 
+        labelIndicator1: '',
+        labelIndicator2: '',
+        labelIndicator3: '',
+
         toggle2State: 0,
         toggle2Visible: false,
 
@@ -145,6 +154,7 @@ export function createProperties() {
 // Signal: 'ui-action', widgetId(string), value(int)
 // toggle*State: toggleButton activate, value = Button index
 // box*SliderValue: slider position changed, value = Slider position
+// box*SliderIsDragging: slider, isDragging, value = 0(fasle) 1(true)
 // box*CheckButton*State: check button state changed, value = 0(fasle) 1(true)
 // box*RadioButtonState: Radio button activated, value = button index
 // settingsButtonClicked: Setting button clicked
