@@ -6,8 +6,8 @@ import sys
 from tapo import ApiClient
 
 IP = os.getenv("TAPO_IP", "10.30.40.51")
-USER = os.getenv("TAPO_USER", "rohitommishra43@gmail.com")
-PASS = os.getenv("TAPO_PASS", "TREmox43")
+USER = os.getenv("TAPO_USER", "")
+PASS = os.getenv("TAPO_PASS", "")
 async def main():
     if len(sys.argv) != 2:
         print("Usage: tapo_control.py [on|off|status]")

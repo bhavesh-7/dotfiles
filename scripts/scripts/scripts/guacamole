@@ -22,7 +22,7 @@ fi
 echo "----------------------------------------------------------------"
 echo
 echo -n "Starting Docker"
-sudo systemctl start docker
+sudo systemctl start docker.socket docker
 loading
 echo -n "Docker Daemon Status: $(systemctl is-active docker)"
 echo
